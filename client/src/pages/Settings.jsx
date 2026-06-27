@@ -13,6 +13,18 @@ const Settings = () => {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Mobile responsiveness listeners
+  const [width, setWidth] = useState(window.innerWidth);
+  useEffect(() => {
+    const handleResize = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isMobile = width <= 992;
+  const isTablet = width <= 768;
+  const isSmallMobile = width <= 480;
+
   const availablePoints = [
     { label: '1 Day before expiry', value: '1' },
     { label: '3 Days before expiry', value: '3' },
@@ -109,10 +121,27 @@ const Settings = () => {
         </div>
       )}
 
-      <div className="settings-layout">
+      <div 
+        className="settings-layout"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 320px',
+          gap: isMobile ? '1.5rem' : '2rem',
+          alignItems: 'start'
+        }}
+      >
         
         {/* Settings Form Card */}
-        <form onSubmit={handleSave} className="details-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <form 
+          onSubmit={handleSave} 
+          className="details-card" 
+          style={{ 
+            padding: isSmallMobile ? '1.25rem' : '2rem', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: isSmallMobile ? '1.5rem' : '2rem' 
+          }}
+        >
           
           {/* Section 1: Threshold Slider */}
           <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '1.5rem' }}>
@@ -123,7 +152,15 @@ const Settings = () => {
               Define how many days prior to expiry a batch should be flagged as <strong>"Near Expiry"</strong>. Flagged items will display in yellow/orange alerts on the dashboard.
             </p>
             
-            <div className="settings-slider-container">
+            <div 
+              className="settings-slider-container"
+              style={{
+                display: 'flex',
+                flexDirection: isSmallMobile ? 'column' : 'row',
+                alignItems: isSmallMobile ? 'stretch' : 'center',
+                gap: isSmallMobile ? '1.25rem' : '1.5rem'
+              }}
+            >
               <div style={{ flex: 1 }}>
                 <input 
                   type="range" 
@@ -140,11 +177,11 @@ const Settings = () => {
                   }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                  <span>1 day</span>
-                  <span>15 days</span>
-                  <span>30 days</span>
-                  <span>45 days</span>
-                  <span>60 days</span>
+                  <span>1 {isSmallMobile ? '' : 'day'}</span>
+                  <span>15 {isSmallMobile ? '' : 'days'}</span>
+                  <span>30 {isSmallMobile ? '' : 'days'}</span>
+                  <span>45 {isSmallMobile ? '' : 'days'}</span>
+                  <span>60 {isSmallMobile ? '' : 'days'}</span>
                 </div>
               </div>
               
@@ -154,7 +191,8 @@ const Settings = () => {
                 borderRadius: '8px',
                 border: '1px solid var(--primary-border)',
                 textAlign: 'center',
-                minWidth: '90px'
+                minWidth: '90px',
+                alignSelf: isSmallMobile ? 'center' : 'auto'
               }}>
                 <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)', display: 'block', lineHeight: 1 }}>
                   {thresholdDays}
@@ -175,7 +213,14 @@ const Settings = () => {
               Trigger push alerts on these specific milestones leading up to product expiration:
             </p>
 
-            <div className="settings-reminders-grid">
+            <div 
+              className="settings-reminders-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: isTablet ? '1fr' : '1fr 1fr',
+                gap: '1rem'
+              }}
+            >
               {availablePoints.map(point => {
                 const isChecked = alertPoints.includes(point.value);
                 return (
@@ -212,12 +257,23 @@ const Settings = () => {
           </div>
 
           {/* Submit Actions */}
-          <div className="settings-submit-container">
+          <div 
+            className="settings-submit-container"
+            style={{
+              display: 'flex',
+              justifyContent: isSmallMobile ? 'stretch' : 'flex-end',
+              marginTop: '0.5rem'
+            }}
+          >
             <button 
               type="submit" 
               className="btn btn-primary" 
               disabled={saving}
-              style={{ padding: '0.75rem 2rem', fontWeight: 600 }}
+              style={{ 
+                padding: '0.75rem 2rem', 
+                fontWeight: 600,
+                width: isSmallMobile ? '100%' : 'auto'
+              }}
             >
               {saving ? 'Saving preferences...' : 'Save Changes'}
             </button>

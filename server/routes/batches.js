@@ -79,6 +79,8 @@ router.post('/', async (req, res) => {
       await db.recalculateMySqlAlerts(req.user.id);
     }
 
+    db.logActivity(`Batch "${product_name}" (Qty: ${qtyVal}) added by user "${req.user.fullName || req.user.email}".`, 'success');
+
     res.status(201).json(newBatch);
   } catch (error) {
     console.error('Create batch error:', error);
@@ -152,6 +154,9 @@ router.delete('/:id', async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ message: 'Batch not found' });
     }
+    
+    db.logActivity(`Batch ID ${req.params.id} deleted by user "${req.user.fullName || req.user.email}".`, 'warning');
+
     res.json({ message: 'Batch deleted successfully' });
   } catch (error) {
     console.error('Delete batch error:', error);

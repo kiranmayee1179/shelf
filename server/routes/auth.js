@@ -44,6 +44,8 @@ router.post('/signup', async (req, res) => {
       expiresIn: '7d'
     });
 
+    db.logActivity(`User "${newUser.full_name}" (${newUser.email}) registered/signed up.`, 'success');
+
     res.status(201).json({
       token,
       user: {
@@ -87,6 +89,8 @@ router.post('/login', async (req, res) => {
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, fullName: user.full_name }, JWT_SECRET, {
       expiresIn: '7d'
     });
+
+    db.logActivity(`User "${user.full_name}" (${user.email}) logged in.`, 'info');
 
     res.json({
       token,
@@ -168,6 +172,8 @@ router.post('/google', async (req, res) => {
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, fullName: user.full_name }, JWT_SECRET, {
       expiresIn: '7d'
     });
+
+    db.logActivity(`User "${user.full_name}" (${user.email}) logged in via Google.`, 'info');
 
     res.json({
       token,

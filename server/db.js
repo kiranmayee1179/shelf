@@ -684,13 +684,12 @@ const db = {
     };
   },
 
+  logActivity: (text, type = 'info') => {
+    logActivity(text, type);
+  },
+
   getRecentActivities: async () => {
-    if (useMock) {
-      return mockActivityLog.slice(0, 10);
-    }
-    return [
-      { id: '1', text: 'Database initialized successfully', type: 'info', created_at: new Date() }
-    ];
+    return mockActivityLog.slice(0, 10);
   },
 
   // User Settings Repository
@@ -1015,7 +1014,7 @@ const db = {
       }),
       alerts,
       settings,
-      activityLog: []
+      activityLog: mockActivityLog
     };
   }
 };

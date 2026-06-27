@@ -136,4 +136,20 @@ API.interceptors.request.use(
   }
 );
 
+// Interceptor to handle responses and log out if 401 Unauthorized occurs
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      console.warn('[API] Received 401 Unauthorized. Clearing local token and session...');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.hash = '#/login'; // Redirect to login
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default API;

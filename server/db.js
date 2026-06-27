@@ -24,6 +24,45 @@ let mockActivityLog = [];
 let mockAlerts = [];
 let mockUserSettings = [];
 
+const fs = require('fs');
+const path = require('path');
+const MOCK_DB_FILE = path.join(__dirname, 'mock_db.json');
+
+function saveMockData() {
+  if (!useMock) return;
+  try {
+    const data = {
+      mockUsers,
+      mockBatches,
+      mockActivityLog,
+      mockAlerts,
+      mockUserSettings
+    };
+    fs.writeFileSync(MOCK_DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to save mock database data:', err);
+  }
+}
+
+function loadMockData() {
+  try {
+    if (fs.existsSync(MOCK_DB_FILE)) {
+      const content = fs.readFileSync(MOCK_DB_FILE, 'utf8');
+      const data = JSON.parse(content);
+      mockUsers = data.mockUsers || [];
+      mockBatches = data.mockBatches || [];
+      mockActivityLog = data.mockActivityLog || [];
+      mockAlerts = data.mockAlerts || [];
+      mockUserSettings = data.mockUserSettings || [];
+      console.log(`Mock Database loaded successfully from file: ${MOCK_DB_FILE}`);
+      return true;
+    }
+  } catch (err) {
+    console.error('Failed to load mock database data from file:', err);
+  }
+  return false;
+}
+
 function logActivity(text, type = 'info') {
   mockActivityLog.unshift({
     id: Date.now() + Math.random().toString(),
@@ -33,6 +72,9 @@ function logActivity(text, type = 'info') {
   });
   if (mockActivityLog.length > 50) {
     mockActivityLog.pop();
+  }
+  if (useMock) {
+    saveMockData();
   }
 }
 
@@ -347,7 +389,10 @@ async function initializeDatabase() {
     console.error('No MySQL database installation is required for testing/demo.');
     console.error('------------------------------------------------------------');
     useMock = true;
-    await seedMockData();
+    if (!loadMockData()) {
+      await seedMockData();
+      saveMockData();
+    }
   }
 }
 
@@ -393,6 +438,7 @@ const db = {
       };
       mockUsers.push(newUser);
       logActivity(`New user account registered for ${fullName} (${email})`, 'info');
+      saveMockData();
       return newUser;
     }
     const [result] = await pool.query(
@@ -409,6 +455,7 @@ const db = {
       const user = mockUsers.find(u => u.id === uId);
       if (user) {
         user.last_login = lastLoginDate;
+        saveMockData();
         return true;
       }
       return false;
@@ -565,6 +612,7 @@ const db = {
       };
       mockBatches.push(newBatch);
       logActivity(`Added new batch for ${product_name} (${qtyVal} units)`, 'success');
+      saveMockData();
       return {
         ...newBatch,
         remaining_days: Math.ceil((new Date(expiry_date) - new Date()) / (1000 * 60 * 60 * 24)),
@@ -610,6 +658,7 @@ const db = {
       };
 
       logActivity(`Updated batch details for ${product_name}`, 'info');
+      saveMockData();
       return await db.getBatchById(bId);
     }
 
@@ -630,6 +679,7 @@ const db = {
       const pName = mockBatches[idx].product_name;
       mockBatches = mockBatches.filter(b => b.id !== bId);
       logActivity(`Deleted batch for ${pName}`, 'warning');
+      saveMockData();
       return true;
     }
 
@@ -763,6 +813,7 @@ const db = {
       }
       settings.reminder_threshold_days = threshold;
       settings.alert_points = points;
+      saveMockData();
       return settings;
     }
 
@@ -876,6 +927,7 @@ const db = {
     });
 
     mockAlerts = [...otherUsersAlerts, ...newAlerts];
+    saveMockData();
   },
 
   // Recalculate Alerts for MySQL DB
@@ -982,6 +1034,7 @@ const db = {
       mockAlerts.forEach(a => {
         if (a.user_id === uId) a.is_read = true;
       });
+      saveMockData();
       return true;
     }
     await pool.query('UPDATE alerts SET is_read = TRUE WHERE user_id = ?', [uId]);
@@ -997,6 +1050,7 @@ const db = {
       const alert = mockAlerts.find(a => a.id === alertId && a.user_id === uId);
       if (alert) {
         alert.is_read = true;
+        saveMockData();
         return true;
       }
       return false;

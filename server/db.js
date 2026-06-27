@@ -977,6 +977,46 @@ const db = {
     }
     await pool.query('UPDATE alerts SET is_read = TRUE WHERE id = ? AND user_id = ?', [alertId, uId]);
     return true;
+  },
+
+  getViewerData: async () => {
+    if (useMock) {
+      return {
+        isMock: true,
+        users: mockUsers.map(({ password, ...u }) => u),
+        batches: mockBatches,
+        alerts: mockAlerts,
+        settings: mockUserSettings,
+        activityLog: mockActivityLog
+      };
+    }
+    const [users] = await pool.query('SELECT id, full_name, email, role, created_at FROM users');
+    const [batches] = await pool.query('SELECT * FROM production_batches');
+    const [alerts] = await pool.query('SELECT * FROM alerts');
+    const [settings] = await pool.query('SELECT * FROM user_settings');
+    return {
+      isMock: false,
+      users,
+      batches: batches.map(b => {
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const exp = new Date(b.expiry_date);
+        exp.setHours(0, 0, 0, 0);
+        const diffTime = exp - now;
+        const rem = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return {
+          ...b,
+          remaining_days: rem,
+          batch_number: `B-BATCH-${b.id.toString().padStart(3, '0')}`,
+          prepared_date: b.manufacturing_date,
+          quantity_produced: b.quantity,
+          remaining_quantity: b.quantity
+        };
+      }),
+      alerts,
+      settings,
+      activityLog: []
+    };
   }
 };
 

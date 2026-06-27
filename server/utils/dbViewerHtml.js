@@ -28,6 +28,17 @@ function renderDbViewerHtml(data) {
     }
   };
 
+  const safeGetIsoString = (val, fallback = 'N/A') => {
+    if (!val || val === 'null' || val === 'undefined') return fallback;
+    try {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return fallback;
+      return d.toISOString();
+    } catch (e) {
+      return fallback;
+    }
+  };
+
   // Helper to get batch status class
   const getBatchStatusClass = (status) => {
     switch (String(status).toLowerCase()) {
@@ -71,8 +82,8 @@ function renderDbViewerHtml(data) {
       <td><strong>${u.name}</strong></td>
       <td>${u.email}</td>
       <td><span class="badge ${u.role === 'admin' ? 'badge-purple' : 'badge-info'}">${u.role}</span></td>
-      <td class="local-timestamp" data-time="${u.createdAt}">${u.createdAt ? new Date(u.createdAt).toISOString() : 'N/A'}</td>
-      <td class="local-timestamp" data-time="${u.lastLogin}">${u.lastLogin ? new Date(u.lastLogin).toISOString() : 'Never Logged In'}</td>
+      <td class="local-timestamp" data-time="${safeGetIsoString(u.createdAt, '')}">${safeGetIsoString(u.createdAt, 'N/A')}</td>
+      <td class="local-timestamp" data-time="${safeGetIsoString(u.lastLogin, '')}">${safeGetIsoString(u.lastLogin, 'Never Logged In')}</td>
     </tr>
   `).join('');
 

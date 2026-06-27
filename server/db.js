@@ -1069,8 +1069,10 @@ const db = {
         createdAt: u.created_at,
         lastLogin: u.last_login
       })).sort((a, b) => {
-        const timeA = new Date(a.lastLogin || a.createdAt).getTime();
-        const timeB = new Date(b.lastLogin || b.createdAt).getTime();
+        const dateA = new Date(a.lastLogin || a.createdAt);
+        const dateB = new Date(b.lastLogin || b.createdAt);
+        const timeA = isNaN(dateA.getTime()) ? 0 : dateA.getTime();
+        const timeB = isNaN(dateB.getTime()) ? 0 : dateB.getTime();
         return timeB - timeA; // Descending (latest first)
       });
     };

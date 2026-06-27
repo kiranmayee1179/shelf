@@ -71,7 +71,7 @@ function renderDbViewerHtml(data) {
       <td><strong>${u.full_name}</strong></td>
       <td>${u.email}</td>
       <td><span class="badge ${u.role === 'admin' ? 'badge-purple' : 'badge-info'}">${u.role}</span></td>
-      <td>${u.created_at ? new Date(u.created_at).toLocaleString() : 'N/A'}</td>
+      <td class="local-time" data-time="${u.created_at}">${u.created_at ? new Date(u.created_at).toISOString() : 'N/A'}</td>
     </tr>
   `).join('');
 
@@ -85,7 +85,7 @@ function renderDbViewerHtml(data) {
       <td><span class="badge ${getPriorityClass(a.priority)}">${a.priority}</span></td>
       <td>${a.message}</td>
       <td><span class="badge ${a.is_read ? 'badge-success' : 'badge-warning'}">${a.is_read ? 'Read' : 'Unread'}</span></td>
-      <td>${a.created_at ? new Date(a.created_at).toLocaleString() : 'N/A'}</td>
+      <td class="local-time" data-time="${a.created_at}">${a.created_at ? new Date(a.created_at).toISOString() : 'N/A'}</td>
     </tr>
   `).join('');
 
@@ -102,7 +102,7 @@ function renderDbViewerHtml(data) {
   const activityRows = activityLog && activityLog.length > 0 
     ? activityLog.map(act => `
         <div class="log-item ${act.type || 'info'}">
-          <span class="log-time">[${new Date(act.created_at).toLocaleTimeString()}]</span>
+          <span class="log-time local-time" data-time="${act.created_at}" data-time-only="true">[${act.created_at ? new Date(act.created_at).toISOString() : 'N/A'}]</span>
           <span class="log-text">${act.text}</span>
         </div>
       `).join('')
@@ -738,6 +738,24 @@ function renderDbViewerHtml(data) {
   </div>
 
   <script>
+    // Format all server dates to the browser's local timezone
+    document.addEventListener("DOMContentLoaded", function() {
+      document.querySelectorAll('.local-time').forEach(el => {
+        const utcStr = el.getAttribute('data-time');
+        const timeOnly = el.getAttribute('data-time-only') === 'true';
+        if (utcStr && utcStr !== 'N/A') {
+          const d = new Date(utcStr);
+          if (!isNaN(d.getTime())) {
+            if (timeOnly) {
+              el.innerText = '[' + d.toLocaleTimeString() + ']';
+            } else {
+              el.innerText = d.toLocaleString();
+            }
+          }
+        }
+      });
+    });
+
     function switchTab(evt, tabId) {
       // Hide all contents
       const contents = document.querySelectorAll('.tab-content');

@@ -68,10 +68,11 @@ function renderDbViewerHtml(data) {
   const userRows = users.map(u => `
     <tr>
       <td>${u.id}</td>
-      <td><strong>${u.full_name}</strong></td>
+      <td><strong>${u.name}</strong></td>
       <td>${u.email}</td>
       <td><span class="badge ${u.role === 'admin' ? 'badge-purple' : 'badge-info'}">${u.role}</span></td>
-      <td class="local-time" data-time="${u.created_at}">${u.created_at ? new Date(u.created_at).toISOString() : 'N/A'}</td>
+      <td class="local-timestamp" data-time="${u.createdAt}">${u.createdAt ? new Date(u.createdAt).toISOString() : 'N/A'}</td>
+      <td class="local-timestamp" data-time="${u.lastLogin}">${u.lastLogin ? new Date(u.lastLogin).toISOString() : 'Never Logged In'}</td>
     </tr>
   `).join('');
 
@@ -644,10 +645,11 @@ function renderDbViewerHtml(data) {
             <thead>
               <tr>
                 <th>ID</th>
-                <th>Full Name</th>
+                <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
-                <th>Created At</th>
+                <th>Signup Time</th>
+                <th>Last Login</th>
               </tr>
             </thead>
             <tbody>
@@ -655,7 +657,7 @@ function renderDbViewerHtml(data) {
             </tbody>
           </table>
         ` : `
-          <div class="empty-state">No users registered in the database.</div>
+          <div class="empty-state">No users found</div>
         `}
       </div>
     </div>
@@ -740,6 +742,7 @@ function renderDbViewerHtml(data) {
   <script>
     // Format all server dates to the browser's local timezone
     document.addEventListener("DOMContentLoaded", function() {
+      // 1. Format general local times
       document.querySelectorAll('.local-time').forEach(el => {
         const utcStr = el.getAttribute('data-time');
         const timeOnly = el.getAttribute('data-time-only') === 'true';
@@ -752,6 +755,34 @@ function renderDbViewerHtml(data) {
               el.innerText = d.toLocaleString();
             }
           }
+        }
+      });
+
+      // 2. Format user activity timestamps
+      function formatDateTime(val) {
+        if (!val || val === 'N/A' || val === 'Never Logged In') return val;
+        const d = new Date(val);
+        if (isNaN(d.getTime())) return val;
+        
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const day = d.getDate();
+        const month = months[d.getMonth()];
+        const year = d.getFullYear();
+        
+        let hours = d.getHours();
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        return day + ' ' + month + ' ' + year + ', ' + hours + ':' + minutes + ' ' + ampm;
+      }
+
+      document.querySelectorAll('.local-timestamp').forEach(el => {
+        const utcStr = el.getAttribute('data-time');
+        if (utcStr && utcStr !== 'null' && utcStr !== 'undefined' && utcStr !== 'N/A' && utcStr !== '') {
+          el.innerText = formatDateTime(utcStr);
+        } else {
+          el.innerText = 'Never Logged In';
         }
       });
     });

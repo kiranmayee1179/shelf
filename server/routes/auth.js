@@ -41,6 +41,8 @@ router.post('/signup', async (req, res) => {
       role: 'user'
     });
 
+    await db.updateUserLastLogin(newUser.id);
+
     const token = jwt.sign({ id: newUser.id, email: newUser.email, role: newUser.role, fullName: newUser.full_name }, JWT_SECRET, {
       expiresIn: '7d'
     });
@@ -86,6 +88,8 @@ router.post('/login', async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
+
+    await db.updateUserLastLogin(user.id);
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, fullName: user.full_name }, JWT_SECRET, {
       expiresIn: '7d'
@@ -169,6 +173,8 @@ router.post('/google', async (req, res) => {
         role: 'user'
       });
     }
+
+    await db.updateUserLastLogin(user.id);
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, fullName: user.full_name }, JWT_SECRET, {
       expiresIn: '7d'

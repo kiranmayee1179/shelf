@@ -79,7 +79,8 @@ async function seedMockData() {
       email: 'admin@example.com',
       password: hashedPassword,
       role: 'admin',
-      created_at: new Date()
+      created_at: new Date(),
+      last_login: null
     }
   ];
 
@@ -161,9 +162,15 @@ async function initializeDatabase() {
         password VARCHAR(255) NULL,
         google_id VARCHAR(100) UNIQUE NULL,
         role VARCHAR(50) DEFAULT 'user',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_login TIMESTAMP NULL DEFAULT NULL
       )
     `);
+
+    // Dynamically update existing users table column if it does not exist
+    try {
+      await pool.query("ALTER TABLE users ADD COLUMN last_login TIMESTAMP NULL DEFAULT NULL");
+    } catch (err) {}
 
     // Clean drop old table or migrate it if it exists with old product_id reference
     try {
@@ -376,18 +383,34 @@ const db = {
         password,
         google_id: googleId || null,
         role: role || 'user',
-        created_at: new Date()
+        created_at: new Date(),
+        last_login: null
       };
       mockUsers.push(newUser);
       logActivity(`New user account registered for ${fullName} (${email})`, 'info');
       return newUser;
     }
     const [result] = await pool.query(
-      'INSERT INTO users (full_name, email, password, google_id, role) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO users (full_name, email, password, google_id, role, last_login) VALUES (?, ?, ?, ?, ?, NULL)',
       [fullName, email, password, googleId || null, role || 'user']
     );
     const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [result.insertId]);
     return rows[0];
+  },
+
+  updateUserLastLogin: async (userId) => {
+    const uId = parseInt(userId);
+    const now = new Date();
+    if (useMock) {
+      const user = mockUsers.find(u => u.id === uId);
+      if (user) {
+        user.last_login = now;
+        return true;
+      }
+      return false;
+    }
+    await pool.query('UPDATE users SET last_login = ? WHERE id = ?', [now, uId]);
+    return true;
   },
 
   // Recalculate statuses of all batches
@@ -979,23 +1002,38 @@ const db = {
   },
 
   getViewerData: async () => {
+    const mapAndSortUsers = (usersList) => {
+      return usersList.map(u => ({
+        id: u.id,
+        name: u.full_name,
+        email: u.email,
+        role: u.role,
+        createdAt: u.created_at,
+        lastLogin: u.last_login
+      })).sort((a, b) => {
+        const timeA = new Date(a.lastLogin || a.createdAt).getTime();
+        const timeB = new Date(b.lastLogin || b.createdAt).getTime();
+        return timeB - timeA; // Descending (latest first)
+      });
+    };
+
     if (useMock) {
       return {
         isMock: true,
-        users: mockUsers.map(({ password, ...u }) => u),
+        users: mapAndSortUsers(mockUsers),
         batches: mockBatches,
         alerts: mockAlerts,
         settings: mockUserSettings,
         activityLog: mockActivityLog
       };
     }
-    const [users] = await pool.query('SELECT id, full_name, email, role, created_at FROM users');
+    const [users] = await pool.query('SELECT id, full_name, email, role, created_at, last_login FROM users');
     const [batches] = await pool.query('SELECT * FROM production_batches');
     const [alerts] = await pool.query('SELECT * FROM alerts');
     const [settings] = await pool.query('SELECT * FROM user_settings');
     return {
       isMock: false,
-      users,
+      users: mapAndSortUsers(users),
       batches: batches.map(b => {
         const now = new Date();
         now.setHours(0, 0, 0, 0);

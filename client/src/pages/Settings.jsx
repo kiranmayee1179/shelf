@@ -109,7 +109,7 @@ const Settings = () => {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '2rem', alignItems: 'start' }}>
+      <div className="settings-layout">
         
         {/* Settings Form Card */}
         <form onSubmit={handleSave} className="details-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -123,7 +123,7 @@ const Settings = () => {
               Define how many days prior to expiry a batch should be flagged as <strong>"Near Expiry"</strong>. Flagged items will display in yellow/orange alerts on the dashboard.
             </p>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+            <div className="settings-slider-container">
               <div style={{ flex: 1 }}>
                 <input 
                   type="range" 
@@ -175,7 +175,7 @@ const Settings = () => {
               Trigger push alerts on these specific milestones leading up to product expiration:
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="settings-reminders-grid">
               {availablePoints.map(point => {
                 const isChecked = alertPoints.includes(point.value);
                 return (
@@ -212,7 +212,7 @@ const Settings = () => {
           </div>
 
           {/* Submit Actions */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+          <div className="settings-submit-container">
             <button 
               type="submit" 
               className="btn btn-primary" 

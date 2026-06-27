@@ -2171,4 +2171,61 @@ body {
   }
 }
 
+/* Settings Page Responsive Layouts */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 2rem;
+  align-items: start;
+}
+
+.settings-reminders-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.settings-slider-container {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.settings-submit-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 992px) {
+  .settings-layout {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+@media (max-width: 576px) {
+  .settings-reminders-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-slider-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  .settings-slider-container > div:last-child {
+    align-self: center;
+  }
+  .settings-submit-container {
+    justify-content: stretch;
+  }
+  .settings-submit-container button {
+    width: 100%;
+  }
+}
+
 

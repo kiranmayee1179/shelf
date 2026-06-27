@@ -309,6 +309,14 @@ function renderDbViewerHtml(data) {
       margin-bottom: 1.5rem;
     }
 
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
     .tab-btn {
       background: rgba(62, 39, 35, 0.03);
       border: 1px solid var(--border-color);

@@ -183,6 +183,51 @@ async function seedMockData() {
   db.recalculateMockAlerts(1);
 }
 
+let reconnectionInterval = null;
+
+function startReconnectionChecks() {
+  if (reconnectionInterval) return;
+  console.log('Starting background MySQL reconnection checks...');
+  reconnectionInterval = setInterval(async () => {
+    if (!useMock) {
+      clearInterval(reconnectionInterval);
+      reconnectionInterval = null;
+      return;
+    }
+    try {
+      console.log('Attempting to reconnect to MySQL database...');
+      const connection = await mysql.createConnection({
+        host: dbConfig.host,
+        user: dbConfig.user,
+        password: dbConfig.password,
+        port: dbConfig.port,
+        ssl: dbConfig.ssl
+      });
+      await connection.end();
+      
+      console.log('MySQL server detected online! Re-initializing database connection pool...');
+      clearInterval(reconnectionInterval);
+      reconnectionInterval = null;
+      await initializeDatabase();
+    } catch (err) {
+      console.log('MySQL reconnection attempt failed:', err.message);
+    }
+  }, 30000); // Check every 30 seconds
+}
+
+function handlePoolError(err) {
+  if (!useMock && (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.message.includes('connect') || err.message.includes('lost') || err.message.includes('closed'))) {
+    console.error('MySQL connection error occurred. Falling back to In-Memory mock database...');
+    useMock = true;
+    if (!loadMockData()) {
+      seedMockData().then(() => saveMockData());
+    } else {
+      saveMockData();
+    }
+    startReconnectionChecks();
+  }
+}
+
 async function initializeDatabase() {
   try {
     const connection = await mysql.createConnection({
@@ -197,7 +242,26 @@ async function initializeDatabase() {
     await connection.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\``);
     await connection.end();
 
-    pool = mysql.createPool(dbConfig);
+    const rawPool = mysql.createPool(dbConfig);
+    pool = {
+      query: async (...args) => {
+        try {
+          return await rawPool.query(...args);
+        } catch (err) {
+          handlePoolError(err);
+          throw err;
+        }
+      },
+      execute: async (...args) => {
+        try {
+          return await rawPool.execute(...args);
+        } catch (err) {
+          handlePoolError(err);
+          throw err;
+        }
+      },
+      end: () => rawPool.end()
+    };
     console.log(`Connection pool established with database "${dbConfig.database}". Running schema updates...`);
 
     // Create tables
@@ -393,6 +457,7 @@ async function initializeDatabase() {
       await seedMockData();
       saveMockData();
     }
+    startReconnectionChecks();
   }
 }
 
@@ -1134,6 +1199,7 @@ setInterval(async () => {
     }
   } catch (err) {
     console.error('Background Expiry Processor Error:', err);
+    handlePoolError(err);
   }
 }, 5 * 60 * 1000);
 

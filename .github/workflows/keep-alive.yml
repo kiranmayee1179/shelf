@@ -1,0 +1,17 @@
+name: Keep Alive Database and Server
+
+on:
+  schedule:
+    # Run every 4 hours to wake up the Render backend, which in turn pings and keeps Aiven MySQL alive.
+    # This prevents Aiven from sleeping (requires activity within 24h) while conserving Render free tier hours.
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # Allows manual triggering from the GitHub Actions tab
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Express Backend
+        run: |
+          curl -s https://shelf-life-reminder.onrender.com/api
+          echo "Render server pinged successfully."

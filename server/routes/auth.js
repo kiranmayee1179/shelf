@@ -11,6 +11,28 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 
 const client = new OAuth2Client(GOOGLE_CLIENT_ID);
 
+function getDeviceInfo(userAgent) {
+  if (!userAgent) return 'Unknown Device';
+  let browser = 'Unknown Browser';
+  let os = 'Unknown OS';
+
+  // Basic OS detection
+  if (/windows/i.test(userAgent)) os = 'Windows';
+  else if (/macintosh|mac os x/i.test(userAgent)) os = 'macOS';
+  else if (/android/i.test(userAgent)) os = 'Android';
+  else if (/iphone|ipad|ipod/i.test(userAgent)) os = 'iOS';
+  else if (/linux/i.test(userAgent)) os = 'Linux';
+
+  // Basic Browser detection
+  if (/chrome|crios/i.test(userAgent) && !/edge|edg/i.test(userAgent) && !/opr/i.test(userAgent)) browser = 'Chrome';
+  else if (/safari/i.test(userAgent) && !/chrome|crios/i.test(userAgent)) browser = 'Safari';
+  else if (/firefox|fxios/i.test(userAgent)) browser = 'Firefox';
+  else if (/edge|edg/i.test(userAgent)) browser = 'Edge';
+  else if (/opr|opera/i.test(userAgent)) browser = 'Opera';
+
+  return `${browser} on ${os}`;
+}
+
 // POST /api/auth/signup
 router.post('/signup', async (req, res) => {
   try {
@@ -26,7 +48,6 @@ router.post('/signup', async (req, res) => {
 
     const existingUser = await db.getUserByEmail(email);
     if (existingUser) {
-      db.logActivity(`Failed signup attempt: Account already exists for "${email}".`, 'warning');
       return res.status(400).json({ message: 'Account already exists with this email' });
     }
 
@@ -41,15 +62,13 @@ router.post('/signup', async (req, res) => {
       role: 'user'
     });
 
-    newUser.lastLogin = new Date();
-    console.log("Updated lastLogin:", newUser.lastLogin);
-    await db.updateUserLastLogin(newUser.id, newUser.lastLogin);
+    const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const deviceInfo = getDeviceInfo(req.headers['user-agent']);
+    await db.logUserActivity(newUser.id, 'SIGNUP', deviceInfo, ipAddress);
 
     const token = jwt.sign({ id: newUser.id, email: newUser.email, role: newUser.role, fullName: newUser.full_name }, JWT_SECRET, {
       expiresIn: '7d'
     });
-
-    db.logActivity(`User "${newUser.full_name}" (${newUser.email}) registered/signed up.`, 'success');
 
     res.status(201).json({
       token,
@@ -91,15 +110,13 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    user.lastLogin = new Date();
-    console.log("Updated lastLogin:", user.lastLogin);
-    await db.updateUserLastLogin(user.id, user.lastLogin);
+    const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const deviceInfo = getDeviceInfo(req.headers['user-agent']);
+    await db.logUserActivity(user.id, 'LOGIN', deviceInfo, ipAddress);
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, fullName: user.full_name }, JWT_SECRET, {
       expiresIn: '7d'
     });
-
-    db.logActivity(`User "${user.full_name}" (${user.email}) logged in.`, 'info');
 
     res.json({
       token,
@@ -127,7 +144,6 @@ router.post('/google', async (req, res) => {
 
     let payload;
     try {
-      // 1. Attempt verification with Google Library
       const ticket = await client.verifyIdToken({
         idToken: credential,
         audience: GOOGLE_CLIENT_ID
@@ -135,7 +151,6 @@ router.post('/google', async (req, res) => {
       payload = ticket.getPayload();
     } catch (verifyError) {
       console.log('Google Client verification failed, attempting mock decode for demo/testing...');
-      // 2. Fallback to decoding the JWT without verification for ease of development / demonstration
       const parts = credential.split('.');
       if (parts.length === 3) {
         try {
@@ -144,7 +159,6 @@ router.post('/google', async (req, res) => {
           return res.status(400).json({ message: 'Invalid token payload format' });
         }
       } else {
-        // If it's a raw mock token, we mock payload from request or create a default one
         payload = {
           email: 'google-user@example.com',
           name: 'Google User',
@@ -159,16 +173,14 @@ router.post('/google', async (req, res) => {
     }
 
     let user = await db.getUserByEmail(email);
+    let isNew = false;
 
     if (user) {
-      // User exists. Ensure google_id is set or update it
       if (!user.google_id) {
-        // Prevent duplicate signup (if user exists with standard password, prevent override or handle it)
-        // The spec says: "IF ACCOUNT EXISTS: Prevent duplicate signup, Show 'Account already exists'"
         return res.status(400).json({ message: 'Account already exists. Please log in with email/password.' });
       }
     } else {
-      // New user. Create automatically!
+      isNew = true;
       user = await db.createUser({
         fullName: name || 'Google User',
         email,
@@ -178,15 +190,13 @@ router.post('/google', async (req, res) => {
       });
     }
 
-    user.lastLogin = new Date();
-    console.log("Updated lastLogin:", user.lastLogin);
-    await db.updateUserLastLogin(user.id, user.lastLogin);
+    const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const deviceInfo = getDeviceInfo(req.headers['user-agent']);
+    await db.logUserActivity(user.id, isNew ? 'SIGNUP' : 'LOGIN', deviceInfo, ipAddress);
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, fullName: user.full_name }, JWT_SECRET, {
       expiresIn: '7d'
     });
-
-    db.logActivity(`User "${user.full_name}" (${user.email}) logged in via Google.`, 'info');
 
     res.json({
       token,
@@ -232,7 +242,6 @@ router.put('/settings', auth, async (req, res) => {
       alert_points: alert_points || '1,3,5'
     });
     
-    // Recalculate alerts with new settings right away
     if (db.isMock()) {
       db.recalculateMockAlerts(req.user.id);
     } else {
@@ -247,4 +256,3 @@ router.put('/settings', auth, async (req, res) => {
 });
 
 module.exports = router;
-

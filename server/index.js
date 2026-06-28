@@ -9,6 +9,8 @@ const alertRoutes = require('./routes/alerts');
 const dashboardRoutes = require('./routes/dashboard');
 const processRoutes = require('./routes/process');
 const chatbotRoutes = require('./routes/chatbot');
+const activityRoutes = require('./routes/activity');
+const productRoutes = require('./routes/products');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -53,6 +55,9 @@ app.use(express.json());
 // Routes Mounts
 app.use('/api/auth', authRoutes);
 app.use('/api/batches', batchRoutes);
+app.use('/api/batch', batchRoutes);
+app.use('/api/activity', activityRoutes);
+app.use('/api/products', productRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/process', processRoutes);

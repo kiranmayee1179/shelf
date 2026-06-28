@@ -1,5 +1,7 @@
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const isAiven = (process.env.DB_HOST || '').includes('aivencloud.com');
@@ -19,13 +21,13 @@ let useMock = false;
 
 // Mock database state
 let mockUsers = [];
-let mockBatches = [];
-let mockActivityLog = [];
+let mockProducts = [];
+let mockProductBatches = [];
+let mockUserActivities = [];
+let mockProductActivities = [];
 let mockAlerts = [];
 let mockUserSettings = [];
 
-const fs = require('fs');
-const path = require('path');
 const MOCK_DB_FILE = path.join(__dirname, 'mock_db.json');
 
 function saveMockData() {
@@ -33,8 +35,10 @@ function saveMockData() {
   try {
     const data = {
       mockUsers,
-      mockBatches,
-      mockActivityLog,
+      mockProducts,
+      mockProductBatches,
+      mockUserActivities,
+      mockProductActivities,
       mockAlerts,
       mockUserSettings
     };
@@ -50,8 +54,10 @@ function loadMockData() {
       const content = fs.readFileSync(MOCK_DB_FILE, 'utf8');
       const data = JSON.parse(content);
       mockUsers = data.mockUsers || [];
-      mockBatches = data.mockBatches || [];
-      mockActivityLog = data.mockActivityLog || [];
+      mockProducts = data.mockProducts || [];
+      mockProductBatches = data.mockProductBatches || [];
+      mockUserActivities = data.mockUserActivities || [];
+      mockProductActivities = data.mockProductActivities || [];
       mockAlerts = data.mockAlerts || [];
       mockUserSettings = data.mockUserSettings || [];
       console.log(`Mock Database loaded successfully from file: ${MOCK_DB_FILE}`);
@@ -61,21 +67,6 @@ function loadMockData() {
     console.error('Failed to load mock database data from file:', err);
   }
   return false;
-}
-
-function logActivity(text, type = 'info') {
-  mockActivityLog.unshift({
-    id: Date.now() + Math.random().toString(),
-    text,
-    type,
-    created_at: new Date()
-  });
-  if (mockActivityLog.length > 50) {
-    mockActivityLog.pop();
-  }
-  if (useMock) {
-    saveMockData();
-  }
 }
 
 // Helper to add/subtract days
@@ -103,7 +94,7 @@ const calculateExpiryAndStatus = (mfgDateStr, shelfLifeDays) => {
   let status = 'Fresh';
   if (remainingDays < 0) {
     status = 'Expired';
-  } else if (remainingDays <= 5) {
+  } else if (remainingDays <= 7) {
     status = 'Near Expiry';
   }
 
@@ -121,12 +112,11 @@ async function seedMockData() {
   mockUsers = [
     {
       id: 1,
-      full_name: 'Demo Admin',
+      name: 'Demo Admin',
       email: 'admin@example.com',
       password: hashedPassword,
       role: 'admin',
-      created_at: new Date(),
-      last_login: null
+      created_at: new Date()
     }
   ];
 
@@ -138,48 +128,74 @@ async function seedMockData() {
     }
   ];
 
-  const now = new Date();
-
-  // Create initial batches directly storing product_name and category
-  const initialData = [
-    { product_name: 'Plain Appalam', category: 'Appalam', daysAgo: -10, shelf_life: 90, quantity: 60 },
-    { product_name: 'Plain Appalam', category: 'Appalam', daysAgo: -2, shelf_life: 90, quantity: 40 },
-    { product_name: 'Masala Appalam', category: 'Appalam', daysAgo: -5, shelf_life: 90, quantity: 50 },
-    { product_name: 'Murukku', category: 'Home Made Snacks', daysAgo: -15, shelf_life: 45, quantity: 60 },
-    { product_name: 'Murukku', category: 'Home Made Snacks', daysAgo: -44, shelf_life: 45, quantity: 30 },
-    { product_name: 'Mixture', category: 'Home Made Snacks', daysAgo: -12, shelf_life: 45, quantity: 45 },
-    { product_name: 'Rice Vadam', category: 'Vadam', daysAgo: -20, shelf_life: 180, quantity: 70 },
-    { product_name: 'Color Vadam', category: 'Vadam', daysAgo: -15, shelf_life: 180, quantity: 50 },
-    { product_name: 'Mango Pickle', category: 'Dry Pickle', daysAgo: -30, shelf_life: 180, quantity: 50 },
-    { product_name: 'Mango Pickle', category: 'Dry Pickle', daysAgo: -178, shelf_life: 180, quantity: 15 },
-    { product_name: 'Lemon Pickle', category: 'Dry Pickle', daysAgo: -25, shelf_life: 180, quantity: 40 },
-    { product_name: 'Pure Homemade Ghee', category: 'Home Made Ghee', daysAgo: -40, shelf_life: 180, quantity: 20 },
-    { product_name: 'Pure Homemade Ghee', category: 'Home Made Ghee', daysAgo: -182, shelf_life: 180, quantity: 5 },
-    { product_name: 'Banana Chips', category: 'Chips', daysAgo: -5, shelf_life: 30, quantity: 40 },
-    { product_name: 'Banana Chips', category: 'Chips', daysAgo: -29, shelf_life: 30, quantity: 10 },
-    { product_name: 'Potato Chips', category: 'Chips', daysAgo: -6, shelf_life: 30, quantity: 30 }
+  mockProducts = [
+    { id: 1, product_name: 'Plain Appalam', category: 'Appalam', price: 10.00, description: 'Traditional plain appalam' },
+    { id: 2, product_name: 'Masala Appalam', category: 'Appalam', price: 12.00, description: 'Spicy masala appalam' },
+    { id: 3, product_name: 'Murukku', category: 'Snacks', price: 15.00, description: 'Crispy home made snacks' },
+    { id: 4, product_name: 'Mixture', category: 'Snacks', price: 15.00, description: 'Crunchy snack mixture' },
+    { id: 5, product_name: 'Rice Vadam', category: 'Ready Mix', price: 20.00, description: 'Crisp rice papads' },
+    { id: 6, product_name: 'Color Vadam', category: 'Ready Mix', price: 22.00, description: 'Colorful ready mix papads' },
+    { id: 7, product_name: 'Mango Pickle', category: 'Pickle', price: 25.00, description: 'Tangy mango pickle' },
+    { id: 8, product_name: 'Lemon Pickle', category: 'Pickle', price: 25.00, description: 'Sour lemon pickle' },
+    { id: 9, product_name: 'Pure Homemade Ghee', category: 'Snacks', price: 50.00, description: 'Delicious pure ghee' },
+    { id: 10, product_name: 'Banana Chips', category: 'Snacks', price: 18.00, description: 'Crispy banana chips' },
+    { id: 11, product_name: 'Potato Chips', category: 'Snacks', price: 18.00, description: 'Classic potato chips' }
   ];
 
-  mockBatches = initialData.map((item, idx) => {
+  const now = new Date();
+  const initialBatches = [
+    { product_id: 1, daysAgo: -10, shelf_life: 90, quantity: 60 },
+    { product_id: 1, daysAgo: -2, shelf_life: 90, quantity: 40 },
+    { product_id: 2, daysAgo: -5, shelf_life: 90, quantity: 50 },
+    { product_id: 3, daysAgo: -15, shelf_life: 45, quantity: 60 },
+    { product_id: 3, daysAgo: -44, shelf_life: 45, quantity: 30 },
+    { product_id: 4, daysAgo: -12, shelf_life: 45, quantity: 45 },
+    { product_id: 5, daysAgo: -20, shelf_life: 180, quantity: 70 },
+    { product_id: 6, daysAgo: -15, shelf_life: 180, quantity: 50 },
+    { product_id: 7, daysAgo: -30, shelf_life: 180, quantity: 50 },
+    { product_id: 7, daysAgo: -178, shelf_life: 180, quantity: 15 },
+    { product_id: 8, daysAgo: -25, shelf_life: 180, quantity: 40 },
+    { product_id: 9, daysAgo: -40, shelf_life: 180, quantity: 20 },
+    { product_id: 9, daysAgo: -182, shelf_life: 180, quantity: 5 },
+    { product_id: 10, daysAgo: -5, shelf_life: 30, quantity: 40 },
+    { product_id: 10, daysAgo: -29, shelf_life: 30, quantity: 10 },
+    { product_id: 11, daysAgo: -6, shelf_life: 30, quantity: 30 }
+  ];
+
+  mockProductBatches = initialBatches.map((item, idx) => {
     const mfgDate = addDays(now, item.daysAgo);
-    const { expiry_date, status } = calculateExpiryAndStatus(mfgDate, item.shelf_life);
+    const expiryDate = addDays(mfgDate, item.shelf_life);
 
     return {
       id: idx + 1,
-      product_name: item.product_name,
-      category: item.category,
+      product_id: item.product_id,
+      batch_number: `B-BATCH-${String(idx + 1).padStart(3, '0')}`,
       manufacturing_date: mfgDate.toISOString().split('T')[0],
-      shelf_life: item.shelf_life,
-      expiry_date,
+      expiry_date: expiryDate.toISOString().split('T')[0],
       quantity: item.quantity,
-      status,
-      source: 'Web Dashboard',
-      batch_details: 'Initial inventory load.',
       created_at: new Date()
     };
   });
 
-  logActivity('Mock Database initialized with 6 production batches.', 'info');
+  mockUserActivities = [
+    {
+      id: 1,
+      user_id: 1,
+      action_type: 'SIGNUP',
+      device_info: 'Chrome on Windows',
+      ip_address: '127.0.0.1',
+      timestamp: addDays(now, -5)
+    },
+    {
+      id: 2,
+      user_id: 1,
+      action_type: 'LOGIN',
+      device_info: 'Chrome on Windows',
+      ip_address: '127.0.0.1',
+      timestamp: now
+    }
+  ];
+
   db.recalculateMockAlerts(1);
 }
 
@@ -264,68 +280,78 @@ async function initializeDatabase() {
     };
     console.log(`Connection pool established with database "${dbConfig.database}". Running schema updates...`);
 
-    // Create tables
+    // Create Tables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        full_name VARCHAR(100) NOT NULL,
+        name VARCHAR(100) NOT NULL,
         email VARCHAR(150) UNIQUE NOT NULL,
         password VARCHAR(255) NULL,
         google_id VARCHAR(100) UNIQUE NULL,
         role VARCHAR(50) DEFAULT 'user',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        last_login TIMESTAMP NULL DEFAULT NULL
-      )
-    `);
-
-    // Dynamically update existing users table column if it does not exist
-    try {
-      await pool.query("ALTER TABLE users ADD COLUMN last_login TIMESTAMP NULL DEFAULT NULL");
-    } catch (err) {}
-
-    // Clean drop old table or migrate it if it exists with old product_id reference
-    try {
-      const [columns] = await pool.query("SHOW COLUMNS FROM production_batches LIKE 'product_id'");
-      if (columns.length > 0) {
-        console.log('Old schema detected. Dropping old production_batches & products tables for refactoring...');
-        await pool.query('DROP TABLE IF EXISTS dispatches');
-        await pool.query('DROP TABLE IF EXISTS order_items');
-        await pool.query('DROP TABLE IF EXISTS orders');
-        await pool.query('DROP TABLE IF EXISTS alerts');
-        await pool.query('DROP TABLE IF EXISTS inventory');
-        await pool.query('DROP TABLE IF EXISTS subscriptions');
-        await pool.query('DROP TABLE IF EXISTS followups');
-        await pool.query('DROP TABLE IF EXISTS support_tickets');
-        await pool.query('DROP TABLE IF EXISTS production_batches');
-        await pool.query('DROP TABLE IF EXISTS products');
-      }
-    } catch (err) {
-      // Ignore drop errors if table doesn't exist
-    }
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS production_batches (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        product_name VARCHAR(150) NOT NULL,
-        category VARCHAR(100) NOT NULL,
-        manufacturing_date DATE NOT NULL,
-        shelf_life INT NOT NULL,
-        expiry_date DATE NOT NULL,
-        quantity INT NOT NULL,
-        status VARCHAR(50) NOT NULL,
-        source VARCHAR(100) DEFAULT 'Web Dashboard',
-        batch_details TEXT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Dynamically update existing production_batches table columns if they do not exist
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_activity (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        action_type VARCHAR(50) NOT NULL,
+        device_info VARCHAR(255) NOT NULL,
+        ip_address VARCHAR(50) NOT NULL,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
     try {
-      await pool.query("ALTER TABLE production_batches ADD COLUMN source VARCHAR(100) DEFAULT 'Web Dashboard'");
-    } catch (err) {}
+      await pool.query('CREATE INDEX idx_user_activity_user_id ON user_activity(user_id)');
+      await pool.query('CREATE INDEX idx_user_activity_timestamp ON user_activity(timestamp)');
+    } catch (e) {}
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS products (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        product_name VARCHAR(150) NOT NULL UNIQUE,
+        category VARCHAR(100) NOT NULL,
+        price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        description TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS product_batches (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        product_id INT NOT NULL,
+        batch_number VARCHAR(50) NOT NULL,
+        manufacturing_date DATE NOT NULL,
+        expiry_date DATE NOT NULL,
+        quantity INT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+      )
+    `);
+
     try {
-      await pool.query("ALTER TABLE production_batches ADD COLUMN batch_details TEXT NULL");
-    } catch (err) {}
+      await pool.query('CREATE INDEX idx_product_batches_product_id ON product_batches(product_id)');
+    } catch (e) {}
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS product_activity (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        product_id INT NOT NULL,
+        action VARCHAR(50) NOT NULL,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+      )
+    `);
+
+    try {
+      await pool.query('CREATE INDEX idx_product_activity_product_id ON product_activity(product_id)');
+      await pool.query('CREATE INDEX idx_product_activity_timestamp ON product_activity(timestamp)');
+    } catch (e) {}
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS user_settings (
@@ -336,6 +362,40 @@ async function initializeDatabase() {
       )
     `);
 
+    // Migration of legacy 'production_batches' table data
+    try {
+      const [oldTableExists] = await pool.query("SHOW TABLES LIKE 'production_batches'");
+      if (oldTableExists.length > 0) {
+        console.log('Legacy "production_batches" table found. Migrating data to normalized tables...');
+        const [oldBatches] = await pool.query('SELECT * FROM production_batches');
+        for (const row of oldBatches) {
+          let [prodRows] = await pool.query('SELECT id FROM products WHERE product_name = ?', [row.product_name]);
+          let productId;
+          if (prodRows.length === 0) {
+            const [insertProd] = await pool.query(
+              'INSERT INTO products (product_name, category, price, description) VALUES (?, ?, ?, ?)',
+              [row.product_name, row.category, 0.00, row.batch_details || 'Migrated product.']
+            );
+            productId = insertProd.insertId;
+          } else {
+            productId = prodRows[0].id;
+          }
+
+          const batchNum = row.batch_number || `B-BATCH-${String(row.id).padStart(3, '0')}`;
+          await pool.query(
+            'INSERT INTO product_batches (product_id, batch_number, manufacturing_date, expiry_date, quantity) VALUES (?, ?, ?, ?, ?)',
+            [productId, batchNum, row.manufacturing_date, row.expiry_date, row.quantity]
+          );
+        }
+        console.log('Migration complete. Dropping old table production_batches...');
+        await pool.query('DROP TABLE IF EXISTS alerts');
+        await pool.query('DROP TABLE IF EXISTS production_batches');
+      }
+    } catch (migError) {
+      console.error('Migration error:', migError);
+    }
+
+    // Ensure alerts table exists referencing product_batches
     await pool.query(`
       CREATE TABLE IF NOT EXISTS alerts (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -346,16 +406,10 @@ async function initializeDatabase() {
         message TEXT NOT NULL,
         is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (batch_id) REFERENCES production_batches(id) ON DELETE CASCADE,
+        FOREIGN KEY (batch_id) REFERENCES product_batches(id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     `);
-
-    // Dynamically update existing alerts table to support user_id if column missing
-    try {
-      await pool.query("ALTER TABLE alerts ADD COLUMN user_id INT NOT NULL");
-      await pool.query("ALTER TABLE alerts ADD FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE");
-    } catch (err) {}
 
     // Seed default admin in MySQL
     const [userRows] = await pool.query('SELECT COUNT(*) AS cnt FROM users');
@@ -364,7 +418,7 @@ async function initializeDatabase() {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash('admin123', salt);
       const [insertRes] = await pool.query(
-        'INSERT INTO users (full_name, email, password, role) VALUES (?, ?, ?, ?)',
+        'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
         ['Demo Admin', 'admin@example.com', hashedPassword, 'admin']
       );
       adminUserId = insertRes.insertId;
@@ -385,59 +439,68 @@ async function initializeDatabase() {
       );
     }
 
-    // Migrate database seed data if old categories exist
-    try {
-      const [oldCatRows] = await pool.query("SELECT COUNT(*) AS cnt FROM production_batches WHERE category IN ('Pickles', 'Snacks', 'Sweets', 'Ghee')");
-      const [newCatRows] = await pool.query("SELECT COUNT(*) AS cnt FROM production_batches WHERE category IN ('Appalam', 'Dry Pickle')");
-      if (oldCatRows[0].cnt > 0 && newCatRows[0].cnt === 0) {
-        console.log('Migrating database seed data for traditional preserved foods categories...');
-        await pool.query('DELETE FROM alerts');
-        await pool.query('DELETE FROM production_batches');
-      }
-
-      // Dynamic cleanup for Vattal category
-      const [vattalRows] = await pool.query("SELECT COUNT(*) AS cnt FROM production_batches WHERE category = 'Vattal'");
-      if (vattalRows[0].cnt > 0) {
-        console.log('Removing obsolete Vattal category batches and alerts...');
-        await pool.query("DELETE FROM alerts WHERE batch_id IN (SELECT id FROM production_batches WHERE category = 'Vattal')");
-        await pool.query("DELETE FROM production_batches WHERE category = 'Vattal'");
-      }
-    } catch (err) {
-      console.error('Migration check failed:', err.message);
-    }
-
-    // Seed default batches if production_batches is empty
-    const [batchRows] = await pool.query('SELECT COUNT(*) AS cnt FROM production_batches');
-    if (batchRows[0].cnt === 0) {
-      const now = new Date();
-      const initialData = [
-        ['Plain Appalam', 'Appalam', addDays(now, -10), 90, 60],
-        ['Plain Appalam', 'Appalam', addDays(now, -2), 90, 40],
-        ['Masala Appalam', 'Appalam', addDays(now, -5), 90, 50],
-        ['Murukku', 'Home Made Snacks', addDays(now, -15), 45, 60],
-        ['Murukku', 'Home Made Snacks', addDays(now, -44), 45, 30],
-        ['Mixture', 'Home Made Snacks', addDays(now, -12), 45, 45],
-        ['Rice Vadam', 'Vadam', addDays(now, -20), 180, 70],
-        ['Color Vadam', 'Vadam', addDays(now, -15), 180, 50],
-        ['Mango Pickle', 'Dry Pickle', addDays(now, -30), 180, 50],
-        ['Mango Pickle', 'Dry Pickle', addDays(now, -178), 180, 15],
-        ['Lemon Pickle', 'Dry Pickle', addDays(now, -25), 180, 40],
-        ['Pure Homemade Ghee', 'Home Made Ghee', addDays(now, -40), 180, 20],
-        ['Pure Homemade Ghee', 'Home Made Ghee', addDays(now, -182), 180, 5],
-        ['Banana Chips', 'Chips', addDays(now, -5), 30, 40],
-        ['Banana Chips', 'Chips', addDays(now, -29), 30, 10],
-        ['Potato Chips', 'Chips', addDays(now, -6), 30, 30]
+    // Seed default products and batches if products table is empty
+    const [productCountRows] = await pool.query('SELECT COUNT(*) AS cnt FROM products');
+    if (productCountRows[0].cnt === 0) {
+      const initialProducts = [
+        ['Plain Appalam', 'Appalam', 10.00, 'Traditional plain appalam'],
+        ['Masala Appalam', 'Appalam', 12.00, 'Spicy masala appalam'],
+        ['Murukku', 'Snacks', 15.00, 'Crispy home made snacks'],
+        ['Mixture', 'Snacks', 15.00, 'Crunchy snack mixture'],
+        ['Rice Vadam', 'Ready Mix', 20.00, 'Crisp rice papads'],
+        ['Color Vadam', 'Ready Mix', 22.00, 'Colorful ready mix papads'],
+        ['Mango Pickle', 'Pickle', 25.00, 'Tangy mango pickle'],
+        ['Lemon Pickle', 'Pickle', 25.00, 'Sour lemon pickle'],
+        ['Pure Homemade Ghee', 'Snacks', 50.00, 'Delicious pure ghee'],
+        ['Banana Chips', 'Snacks', 18.00, 'Crispy banana chips'],
+        ['Potato Chips', 'Snacks', 18.00, 'Classic potato chips']
       ];
 
-      for (const row of initialData) {
-        const [pName, cat, mfgDate, shelfLife, qty] = row;
-        const { expiry_date, status } = calculateExpiryAndStatus(mfgDate, shelfLife);
+      for (const row of initialProducts) {
+        const [pName, cat, price, desc] = row;
         await pool.query(
-          'INSERT INTO production_batches (product_name, category, manufacturing_date, shelf_life, expiry_date, quantity, status, source, batch_details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [pName, cat, mfgDate.toISOString().split('T')[0], shelfLife, expiry_date, qty, status, 'Web Dashboard', 'Initial database seed.']
+          'INSERT INTO products (product_name, category, price, description) VALUES (?, ?, ?, ?)',
+          [pName, cat, price, desc]
         );
       }
-      console.log('Seeded initial production batches into MySQL database.');
+
+      // Add default batches for products
+      const now = new Date();
+      const initialBatches = [
+        ['Plain Appalam', -10, 90, 60],
+        ['Plain Appalam', -2, 90, 40],
+        ['Masala Appalam', -5, 90, 50],
+        ['Murukku', -15, 45, 60],
+        ['Murukku', -44, 45, 30],
+        ['Mixture', -12, 45, 45],
+        ['Rice Vadam', -20, 180, 70],
+        ['Color Vadam', -15, 180, 50],
+        ['Mango Pickle', -30, 180, 50],
+        ['Mango Pickle', -178, 180, 15],
+        ['Lemon Pickle', -25, 180, 40],
+        ['Pure Homemade Ghee', -40, 180, 20],
+        ['Pure Homemade Ghee', -182, 180, 5],
+        ['Banana Chips', -5, 30, 40],
+        ['Banana Chips', -29, 30, 10],
+        ['Potato Chips', -6, 30, 30]
+      ];
+
+      let batchIdx = 1;
+      for (const batch of initialBatches) {
+        const [prodName, daysAgo, shelfLife, qty] = batch;
+        const [prodRows] = await pool.query('SELECT id FROM products WHERE product_name = ?', [prodName]);
+        if (prodRows.length > 0) {
+          const productId = prodRows[0].id;
+          const mfgDate = addDays(now, daysAgo);
+          const expiryDate = addDays(mfgDate, shelfLife);
+          const batchNum = `B-BATCH-${String(batchIdx++).padStart(3, '0')}`;
+          await pool.query(
+            'INSERT INTO product_batches (product_id, batch_number, manufacturing_date, expiry_date, quantity) VALUES (?, ?, ?, ?, ?)',
+            [productId, batchNum, mfgDate.toISOString().split('T')[0], expiryDate.toISOString().split('T')[0], qty]
+          );
+        }
+      }
+      console.log('Seeded default products and batches into MySQL.');
     }
 
     // Initialize alerts for MySQL
@@ -467,126 +530,146 @@ const db = {
   // Users Repository
   getUserById: async (id) => {
     if (useMock) {
-      return mockUsers.find(u => u.id === parseInt(id)) || null;
+      const u = mockUsers.find(u => u.id === parseInt(id)) || null;
+      if (u) {
+        u.full_name = u.name; // compatibility mapping
+      }
+      return u;
     }
-    const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [id]);
+    const [rows] = await pool.query('SELECT id, name, name AS full_name, email, password, google_id, role, created_at FROM users WHERE id = ?', [id]);
     return rows[0] || null;
   },
 
   getUserByEmail: async (email) => {
     if (useMock) {
-      return mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
+      const u = mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
+      if (u) {
+        u.full_name = u.name; // compatibility mapping
+      }
+      return u;
     }
-    const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+    const [rows] = await pool.query('SELECT id, name, name AS full_name, email, password, google_id, role, created_at FROM users WHERE email = ?', [email]);
     return rows[0] || null;
   },
 
   getUserByGoogleId: async (googleId) => {
     if (useMock) {
-      return mockUsers.find(u => u.google_id === googleId) || null;
+      const u = mockUsers.find(u => u.google_id === googleId) || null;
+      if (u) {
+        u.full_name = u.name;
+      }
+      return u;
     }
-    const [rows] = await pool.query('SELECT * FROM users WHERE google_id = ?', [googleId]);
+    const [rows] = await pool.query('SELECT id, name, name AS full_name, email, password, google_id, role, created_at FROM users WHERE google_id = ?', [googleId]);
     return rows[0] || null;
   },
 
-  createUser: async ({ fullName, email, password, googleId, role }) => {
+  createUser: async ({ name, fullName, email, password, googleId, role }) => {
+    const finalName = name || fullName || 'User';
     if (useMock) {
       const newUser = {
         id: mockUsers.length + 1,
-        full_name: fullName,
+        name: finalName,
+        full_name: finalName,
         email,
         password,
         google_id: googleId || null,
         role: role || 'user',
-        created_at: new Date(),
-        last_login: null
+        created_at: new Date()
       };
       mockUsers.push(newUser);
-      logActivity(`New user account registered for ${fullName} (${email})`, 'info');
       saveMockData();
       return newUser;
     }
     const [result] = await pool.query(
-      'INSERT INTO users (full_name, email, password, google_id, role, last_login) VALUES (?, ?, ?, ?, ?, NULL)',
-      [fullName, email, password, googleId || null, role || 'user']
+      'INSERT INTO users (name, email, password, google_id, role) VALUES (?, ?, ?, ?, ?)',
+      [finalName, email, password, googleId || null, role || 'user']
     );
-    const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [result.insertId]);
-    return rows[0];
+    return {
+      id: result.insertId,
+      name: finalName,
+      full_name: finalName,
+      email,
+      password,
+      role: role || 'user',
+      created_at: new Date()
+    };
   },
 
-  updateUserLastLogin: async (userId, lastLoginDate = new Date()) => {
+  logUserActivity: async (userId, actionType, deviceInfo, ipAddress) => {
     const uId = parseInt(userId);
+    const action = actionType; // 'LOGIN', 'SIGNUP', 'LOGOUT'
+    const device = deviceInfo || 'Unknown';
+    const ip = ipAddress || '127.0.0.1';
+
     if (useMock) {
-      const user = mockUsers.find(u => u.id === uId);
-      if (user) {
-        user.last_login = lastLoginDate;
-        saveMockData();
-        return true;
-      }
-      return false;
+      const newAct = {
+        id: mockUserActivities.length + 1,
+        user_id: uId,
+        action_type: action,
+        device_info: device,
+        ip_address: ip,
+        timestamp: new Date()
+      };
+      mockUserActivities.push(newAct);
+      saveMockData();
+      return newAct;
     }
-    await pool.query('UPDATE users SET last_login = ? WHERE id = ?', [lastLoginDate, uId]);
-    return true;
+
+    const [result] = await pool.query(
+      'INSERT INTO user_activity (user_id, action_type, device_info, ip_address) VALUES (?, ?, ?, ?)',
+      [uId, action, device, ip]
+    );
+    return {
+      id: result.insertId,
+      user_id: uId,
+      action_type: action,
+      device_info: device,
+      ip_address: ip,
+      timestamp: new Date()
+    };
   },
 
   // Recalculate statuses of all batches
   recalculateAllStatuses: async () => {
-    if (useMock) {
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-
-      mockBatches.forEach(b => {
-        const exp = new Date(b.expiry_date);
-        exp.setHours(0, 0, 0, 0);
-        const diffTime = exp - now;
-        const rem = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        if (rem < 0) {
-          b.status = 'Expired';
-        } else if (rem <= 5) {
-          b.status = 'Near Expiry';
-        } else {
-          b.status = 'Fresh';
-        }
-      });
-      return mockBatches;
-    }
-
-    // MySQL Flow
-    await pool.query(`
-      UPDATE production_batches
-      SET status = CASE
-        WHEN DATEDIFF(expiry_date, CURDATE()) < 0 THEN 'Expired'
-        WHEN DATEDIFF(expiry_date, CURDATE()) <= 5 THEN 'Near Expiry'
-        ELSE 'Fresh'
-      END
-    `);
-    const [rows] = await pool.query('SELECT * FROM production_batches ORDER BY expiry_date ASC');
-    return rows;
+    // Dynamically evaluated, no-op for updates since statuses are calculated on queries
+    return await db.getAllBatches();
   },
 
   // Batches Repository
   getAllBatches: async (search = '') => {
-    // Sync statuses relative to today
-    await db.recalculateAllStatuses();
-
     if (useMock) {
-      const list = mockBatches.map(b => {
+      const list = mockProductBatches.map(pb => {
+        const prod = mockProducts.find(p => p.id === pb.product_id) || { product_name: 'Unknown', category: 'Snacks', description: '' };
         const now = new Date();
         now.setHours(0,0,0,0);
-        const exp = new Date(b.expiry_date);
+        const exp = new Date(pb.expiry_date);
         exp.setHours(0,0,0,0);
         const diffTime = exp - now;
         const rem = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         
+        let status = 'Fresh';
+        if (rem < 0) status = 'Expired';
+        else if (rem <= 7) status = 'Near Expiry';
+
         return {
-          ...b,
+          id: pb.id,
+          product_id: pb.product_id,
+          product_name: prod.product_name,
+          category: prod.category,
+          manufacturing_date: pb.manufacturing_date,
+          shelf_life: Math.ceil((new Date(pb.expiry_date) - new Date(pb.manufacturing_date)) / (1000 * 60 * 60 * 24)),
+          expiry_date: pb.expiry_date,
+          quantity: pb.quantity,
+          status,
+          source: 'Web Dashboard',
+          batch_details: prod.description || '',
+          created_at: pb.created_at,
           remaining_days: rem,
-          // Compatibility fields (fallback aliases)
-          batch_number: `B-BATCH-${b.id.toString().padStart(3, '0')}`,
-          prepared_date: b.manufacturing_date,
-          quantity_produced: b.quantity,
-          remaining_quantity: b.quantity
+          batch_number: pb.batch_number,
+          prepared_date: pb.manufacturing_date,
+          quantity_produced: pb.quantity,
+          remaining_quantity: pb.quantity
         };
       });
 
@@ -600,15 +683,25 @@ const db = {
     }
 
     const query = `
-      SELECT *, 
-             DATEDIFF(expiry_date, CURDATE()) AS remaining_days,
-             CONCAT('B-BATCH-', LPAD(id, 3, '0')) AS batch_number,
-             manufacturing_date AS prepared_date,
-             quantity AS quantity_produced,
-             quantity AS remaining_quantity
-      FROM production_batches
-      WHERE product_name LIKE ? OR category LIKE ? OR CONCAT('B-BATCH-', LPAD(id, 3, '0')) LIKE ?
-      ORDER BY expiry_date ASC
+      SELECT pb.id, pb.product_id, p.product_name, p.category, pb.manufacturing_date, 
+             DATEDIFF(pb.expiry_date, pb.manufacturing_date) AS shelf_life,
+             pb.expiry_date, pb.quantity, 
+             CASE 
+               WHEN DATEDIFF(pb.expiry_date, CURDATE()) < 0 THEN 'Expired'
+               WHEN DATEDIFF(pb.expiry_date, CURDATE()) <= 7 THEN 'Near Expiry'
+               ELSE 'Fresh'
+             END AS status,
+             'Web Dashboard' AS source,
+             p.description AS batch_details,
+             DATEDIFF(pb.expiry_date, CURDATE()) AS remaining_days,
+             pb.batch_number,
+             pb.manufacturing_date AS prepared_date,
+             pb.quantity AS quantity_produced,
+             pb.quantity AS remaining_quantity
+      FROM product_batches pb
+      JOIN products p ON pb.product_id = p.id
+      WHERE p.product_name LIKE ? OR p.category LIKE ? OR pb.batch_number LIKE ?
+      ORDER BY pb.expiry_date ASC
     `;
     const term = `%${search}%`;
     const [rows] = await pool.query(query, [term, term, term]);
@@ -616,157 +709,349 @@ const db = {
   },
 
   getBatchById: async (id) => {
-    await db.recalculateAllStatuses();
-
     if (useMock) {
-      const b = mockBatches.find(x => x.id === parseInt(id));
-      if (!b) return null;
-
+      const pb = mockProductBatches.find(x => x.id === parseInt(id));
+      if (!pb) return null;
+      const prod = mockProducts.find(p => p.id === pb.product_id) || { product_name: 'Unknown', category: 'Snacks', description: '' };
       const now = new Date();
       now.setHours(0,0,0,0);
-      const exp = new Date(b.expiry_date);
+      const exp = new Date(pb.expiry_date);
       exp.setHours(0,0,0,0);
       const diffTime = exp - now;
       const rem = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
+      let status = 'Fresh';
+      if (rem < 0) status = 'Expired';
+      else if (rem <= 7) status = 'Near Expiry';
+
       return {
-        ...b,
+        id: pb.id,
+        product_id: pb.product_id,
+        product_name: prod.product_name,
+        category: prod.category,
+        manufacturing_date: pb.manufacturing_date,
+        shelf_life: Math.ceil((new Date(pb.expiry_date) - new Date(pb.manufacturing_date)) / (1000 * 60 * 60 * 24)),
+        expiry_date: pb.expiry_date,
+        quantity: pb.quantity,
+        status,
+        source: 'Web Dashboard',
+        batch_details: prod.description || '',
+        created_at: pb.created_at,
         remaining_days: rem,
-        batch_number: `B-BATCH-${b.id.toString().padStart(3, '0')}`,
-        prepared_date: b.manufacturing_date,
-        quantity_produced: b.quantity,
-        remaining_quantity: b.quantity
+        batch_number: pb.batch_number,
+        prepared_date: pb.manufacturing_date,
+        quantity_produced: pb.quantity,
+        remaining_quantity: pb.quantity
       };
     }
 
     const query = `
-      SELECT *, 
-             DATEDIFF(expiry_date, CURDATE()) AS remaining_days,
-             CONCAT('B-BATCH-', LPAD(id, 3, '0')) AS batch_number,
-             manufacturing_date AS prepared_date,
-             quantity AS quantity_produced,
-             quantity AS remaining_quantity
-      FROM production_batches
-      WHERE id = ?
+      SELECT pb.id, pb.product_id, p.product_name, p.category, pb.manufacturing_date, 
+             DATEDIFF(pb.expiry_date, pb.manufacturing_date) AS shelf_life,
+             pb.expiry_date, pb.quantity, 
+             CASE 
+               WHEN DATEDIFF(pb.expiry_date, CURDATE()) < 0 THEN 'Expired'
+               WHEN DATEDIFF(pb.expiry_date, CURDATE()) <= 7 THEN 'Near Expiry'
+               ELSE 'Fresh'
+             END AS status,
+             'Web Dashboard' AS source,
+             p.description AS batch_details,
+             DATEDIFF(pb.expiry_date, CURDATE()) AS remaining_days,
+             pb.batch_number,
+             pb.manufacturing_date AS prepared_date,
+             pb.quantity AS quantity_produced,
+             pb.quantity AS remaining_quantity
+      FROM product_batches pb
+      JOIN products p ON pb.product_id = p.id
+      WHERE pb.id = ?
     `;
     const [rows] = await pool.query(query, [id]);
     return rows[0] || null;
   },
 
-  createBatch: async ({ product_name, category, manufacturing_date, shelf_life, quantity, source, batch_details }) => {
-    const { expiry_date, status } = calculateExpiryAndStatus(manufacturing_date, shelf_life);
+  createBatch: async (data) => {
+    let {
+      product_id,
+      batch_number,
+      product_name,
+      category,
+      manufacturing_date,
+      shelf_life,
+      expiry_date,
+      quantity
+    } = data;
+
+    let pId = product_id ? parseInt(product_id) : null;
     const qtyVal = parseInt(quantity);
-    const slVal = parseInt(shelf_life);
-    const srcVal = source || 'Web Dashboard';
-    const detVal = batch_details || '';
+    let finalMfg = manufacturing_date;
+    let finalExp = expiry_date;
+
+    // Resolve product name and category if product_id is not provided
+    if (!pId && product_name) {
+      if (useMock) {
+        let prod = mockProducts.find(p => p.product_name.toLowerCase() === product_name.toLowerCase());
+        if (!prod) {
+          const newPId = mockProducts.length > 0 ? Math.max(...mockProducts.map(p => p.id)) + 1 : 1;
+          prod = {
+            id: newPId,
+            product_name,
+            category: category || 'Snacks',
+            price: 0.00,
+            description: 'Created automatically on batch insert.'
+          };
+          mockProducts.push(prod);
+          // log product activity
+          mockProductActivities.push({
+            id: mockProductActivities.length + 1,
+            product_id: newPId,
+            action: 'ADDED',
+            timestamp: new Date()
+          });
+        }
+        pId = prod.id;
+      } else {
+        let [prodRows] = await pool.query('SELECT id FROM products WHERE product_name = ?', [product_name]);
+        if (prodRows.length === 0) {
+          const [insertProd] = await pool.query(
+            'INSERT INTO products (product_name, category, price, description) VALUES (?, ?, ?, ?)',
+            [product_name, category || 'Snacks', 0.00, 'Created automatically on batch insert.']
+          );
+          pId = insertProd.insertId;
+          // log product activity
+          await pool.query('INSERT INTO product_activity (product_id, action) VALUES (?, ?)', [pId, 'ADDED']);
+        } else {
+          pId = prodRows[0].id;
+        }
+      }
+    }
+
+    // Calculate expiry_date or shelf_life
+    if (finalMfg && !finalExp && shelf_life) {
+      const { expiry_date: calculatedExp } = calculateExpiryAndStatus(finalMfg, shelf_life);
+      finalExp = calculatedExp;
+    }
+
+    // Generate batch number if missing
+    if (!batch_number) {
+      const rand = Math.floor(100 + Math.random() * 900);
+      batch_number = `B-BATCH-${rand}`;
+    }
 
     if (useMock) {
-      const newId = mockBatches.length > 0 ? Math.max(...mockBatches.map(b => b.id)) + 1 : 1;
+      const newId = mockProductBatches.length > 0 ? Math.max(...mockProductBatches.map(b => b.id)) + 1 : 1;
       const newBatch = {
         id: newId,
-        product_name,
-        category,
-        manufacturing_date,
-        shelf_life: slVal,
-        expiry_date,
+        product_id: pId,
+        batch_number,
+        manufacturing_date: finalMfg,
+        expiry_date: finalExp,
         quantity: qtyVal,
-        status,
-        source: srcVal,
-        batch_details: detVal,
         created_at: new Date()
       };
-      mockBatches.push(newBatch);
-      logActivity(`Added new batch for ${product_name} (${qtyVal} units)`, 'success');
+      mockProductBatches.push(newBatch);
       saveMockData();
-      return {
-        ...newBatch,
-        remaining_days: Math.ceil((new Date(expiry_date) - new Date()) / (1000 * 60 * 60 * 24)),
-        batch_number: `B-BATCH-${newId.toString().padStart(3, '0')}`,
-        prepared_date: manufacturing_date,
-        quantity_produced: qtyVal,
-        remaining_quantity: qtyVal
-      };
+      return await db.getBatchById(newId);
     }
 
     const [result] = await pool.query(
-      'INSERT INTO production_batches (product_name, category, manufacturing_date, shelf_life, expiry_date, quantity, status, source, batch_details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [product_name, category, manufacturing_date, slVal, expiry_date, qtyVal, status, srcVal, detVal]
+      'INSERT INTO product_batches (product_id, batch_number, manufacturing_date, expiry_date, quantity) VALUES (?, ?, ?, ?, ?)',
+      [pId, batch_number, finalMfg, finalExp, qtyVal]
     );
-
-    logActivity(`Added new batch for ${product_name} (${qtyVal} units)`, 'success');
     return await db.getBatchById(result.insertId);
   },
 
-  updateBatch: async (id, { product_name, category, manufacturing_date, shelf_life, quantity, source, batch_details }) => {
+  updateBatch: async (id, data) => {
     const bId = parseInt(id);
-    const { expiry_date, status } = calculateExpiryAndStatus(manufacturing_date, shelf_life);
-    const qtyVal = parseInt(quantity);
-    const slVal = parseInt(shelf_life);
-    const srcVal = source || 'Web Dashboard';
-    const detVal = batch_details || '';
+    let { product_name, category, manufacturing_date, shelf_life, expiry_date, quantity, product_id, batch_number } = data;
+    
+    // Find existing batch first
+    const existing = await db.getBatchById(bId);
+    if (!existing) return null;
+
+    let pId = product_id ? parseInt(product_id) : existing.product_id;
+    const finalMfg = manufacturing_date || existing.manufacturing_date;
+    let finalExp = expiry_date || existing.expiry_date;
+    const finalQty = quantity !== undefined ? parseInt(quantity) : existing.quantity;
+    const finalBatchNo = batch_number || existing.batch_number;
+
+    if (manufacturing_date && !expiry_date && shelf_life) {
+      const { expiry_date: calculatedExp } = calculateExpiryAndStatus(finalMfg, shelf_life);
+      finalExp = calculatedExp;
+    }
 
     if (useMock) {
-      const idx = mockBatches.findIndex(b => b.id === bId);
+      const idx = mockProductBatches.findIndex(b => b.id === bId);
       if (idx === -1) return null;
       
-      mockBatches[idx] = {
-        ...mockBatches[idx],
-        product_name,
-        category,
-        manufacturing_date,
-        shelf_life: slVal,
-        expiry_date,
-        quantity: qtyVal,
-        status,
-        source: srcVal,
-        batch_details: detVal
+      mockProductBatches[idx] = {
+        ...mockProductBatches[idx],
+        product_id: pId,
+        batch_number: finalBatchNo,
+        manufacturing_date: finalMfg,
+        expiry_date: finalExp,
+        quantity: finalQty
       };
-
-      logActivity(`Updated batch details for ${product_name}`, 'info');
       saveMockData();
       return await db.getBatchById(bId);
     }
 
     await pool.query(
-      'UPDATE production_batches SET product_name = ?, category = ?, manufacturing_date = ?, shelf_life = ?, expiry_date = ?, quantity = ?, status = ?, source = ?, batch_details = ? WHERE id = ?',
-      [product_name, category, manufacturing_date, slVal, expiry_date, qtyVal, status, srcVal, detVal, bId]
+      'UPDATE product_batches SET product_id = ?, batch_number = ?, manufacturing_date = ?, expiry_date = ?, quantity = ? WHERE id = ?',
+      [pId, finalBatchNo, finalMfg, finalExp, finalQty, bId]
     );
-
-    logActivity(`Updated batch details for ${product_name}`, 'info');
     return await db.getBatchById(bId);
   },
 
   deleteBatch: async (id) => {
     const bId = parseInt(id);
     if (useMock) {
-      const idx = mockBatches.findIndex(b => b.id === bId);
+      const idx = mockProductBatches.findIndex(b => b.id === bId);
       if (idx === -1) return false;
-      const pName = mockBatches[idx].product_name;
-      mockBatches = mockBatches.filter(b => b.id !== bId);
-      logActivity(`Deleted batch for ${pName}`, 'warning');
+      mockProductBatches = mockProductBatches.filter(b => b.id !== bId);
       saveMockData();
       return true;
     }
 
-    const [rows] = await pool.query('SELECT product_name FROM production_batches WHERE id = ?', [bId]);
+    const [rows] = await pool.query('SELECT id FROM product_batches WHERE id = ?', [bId]);
     if (rows.length === 0) return false;
-    await pool.query('DELETE FROM production_batches WHERE id = ?', [bId]);
-    logActivity(`Deleted batch for ${rows[0].product_name}`, 'warning');
+    await pool.query('DELETE FROM product_batches WHERE id = ?', [bId]);
     return true;
+  },
+
+  // Products Repository
+  getAllProducts: async () => {
+    if (useMock) {
+      return mockProducts;
+    }
+    const [rows] = await pool.query('SELECT * FROM products ORDER BY product_name ASC');
+    return rows;
+  },
+
+  getProductById: async (id) => {
+    if (useMock) {
+      return mockProducts.find(p => p.id === parseInt(id)) || null;
+    }
+    const [rows] = await pool.query('SELECT * FROM products WHERE id = ?', [id]);
+    return rows[0] || null;
+  },
+
+  createProduct: async ({ product_name, category, price, description }) => {
+    const prc = parseFloat(price || 0.00);
+    if (useMock) {
+      const newId = mockProducts.length > 0 ? Math.max(...mockProducts.map(p => p.id)) + 1 : 1;
+      const newProd = {
+        id: newId,
+        product_name,
+        category,
+        price: prc,
+        description: description || '',
+        created_at: new Date()
+      };
+      mockProducts.push(newProd);
+      mockProductActivities.push({
+        id: mockProductActivities.length + 1,
+        product_id: newId,
+        action: 'ADDED',
+        timestamp: new Date()
+      });
+      saveMockData();
+      return newProd;
+    }
+
+    const [result] = await pool.query(
+      'INSERT INTO products (product_name, category, price, description) VALUES (?, ?, ?, ?)',
+      [product_name, category, prc, description || '']
+    );
+    const pId = result.insertId;
+    await pool.query('INSERT INTO product_activity (product_id, action) VALUES (?, ?)', [pId, 'ADDED']);
+    return await db.getProductById(pId);
+  },
+
+  // User Activities
+  getDailyActivity: async () => {
+    if (useMock) {
+      const groups = {};
+      mockUserActivities.forEach(act => {
+        const dateStr = new Date(act.timestamp).toISOString().split('T')[0];
+        if (!groups[dateStr]) {
+          groups[dateStr] = { date: dateStr, logins: 0, signups: 0 };
+        }
+        if (act.action_type === 'LOGIN') groups[dateStr].logins++;
+        else if (act.action_type === 'SIGNUP') groups[dateStr].signups++;
+      });
+      return Object.values(groups).sort((a, b) => b.date.localeCompare(a.date));
+    }
+
+    const query = `
+      SELECT DATE(timestamp) AS date,
+             SUM(CASE WHEN action_type = 'LOGIN' THEN 1 ELSE 0 END) AS logins,
+             SUM(CASE WHEN action_type = 'SIGNUP' THEN 1 ELSE 0 END) AS signups
+      FROM user_activity
+      GROUP BY DATE(timestamp)
+      ORDER BY date DESC
+    `;
+    const [rows] = await pool.query(query);
+    return rows;
+  },
+
+  getUserActivityFeed: async () => {
+    if (useMock) {
+      return mockUserActivities.map(act => {
+        const user = mockUsers.find(u => u.id === act.user_id) || { name: 'Unknown User' };
+        return {
+          id: act.id,
+          name: user.name,
+          action: act.action_type,
+          timestamp: act.timestamp,
+          device_info: act.device_info,
+          ip_address: act.ip_address
+        };
+      }).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 50);
+    }
+
+    const query = `
+      SELECT ua.id, u.name, ua.action_type AS action, ua.timestamp, ua.device_info, ua.ip_address
+      FROM user_activity ua
+      JOIN users u ON ua.user_id = u.id
+      ORDER BY ua.timestamp DESC
+      LIMIT 50
+    `;
+    const [rows] = await pool.query(query);
+    return rows;
+  },
+
+  getDeviceTracking: async () => {
+    if (useMock) {
+      const counts = {};
+      mockUserActivities.forEach(act => {
+        counts[act.device_info] = (counts[act.device_info] || 0) + 1;
+      });
+      return Object.keys(counts).map(device => ({
+        device_info: device,
+        count: counts[device]
+      })).sort((a, b) => b.count - a.count);
+    }
+
+    const query = `
+      SELECT device_info, COUNT(*) AS count
+      FROM user_activity
+      GROUP BY device_info
+      ORDER BY count DESC
+    `;
+    const [rows] = await pool.query(query);
+    return rows;
   },
 
   // Dashboard Aggregates
   getDashboardStats: async (userId) => {
-    await db.recalculateAllStatuses();
     const batchesList = await db.getAllBatches();
-
     const totalBatches = batchesList.length;
     const totalStock = batchesList.reduce((sum, b) => sum + b.quantity, 0);
 
-    let threshold = 5;
+    let threshold = 7; // Set to 7 days as requested in specification
     if (userId) {
       const settings = await db.getUserSettings(userId);
-      threshold = settings.reminder_threshold_days;
+      threshold = settings.reminder_threshold_days || 7;
     }
 
     const expired = batchesList.filter(b => b.remaining_days < 0).length;
@@ -774,7 +1059,7 @@ const db = {
     const fresh = batchesList.filter(b => b.remaining_days > threshold).length;
 
     return {
-      totalProducts: totalBatches, // backward compatibility mapping
+      totalProducts: totalBatches,
       totalBatches,
       totalStock,
       expiringSoon,
@@ -786,7 +1071,6 @@ const db = {
   getDashboardCharts: async (userId) => {
     const batchesList = await db.getAllBatches();
 
-    // 1. Stock Distribution by Category
     const categoryStock = {};
     batchesList.forEach(b => {
       categoryStock[b.category] = (categoryStock[b.category] || 0) + b.quantity;
@@ -796,11 +1080,10 @@ const db = {
       value: categoryStock[cat]
     }));
 
-    // 2. Expiry Trends
-    let threshold = 5;
+    let threshold = 7;
     if (userId) {
       const settings = await db.getUserSettings(userId);
-      threshold = settings.reminder_threshold_days;
+      threshold = settings.reminder_threshold_days || 7;
     }
 
     const trends = [
@@ -809,7 +1092,6 @@ const db = {
       { name: `Fresh (>${threshold}d)`, count: batchesList.filter(b => b.remaining_days > threshold).length }
     ];
 
-    // 3. Static mock wastage for visual presentation
     const monthlyWastage = [
       { name: 'Jan', wastage: 10 },
       { name: 'Feb', wastage: 15 },
@@ -827,11 +1109,11 @@ const db = {
   },
 
   logActivity: (text, type = 'info') => {
-    logActivity(text, type);
+    console.log(`[Activity Log] Type: ${type} - ${text}`);
   },
 
   getRecentActivities: async () => {
-    return mockActivityLog.slice(0, 10);
+    return await db.getUserActivityFeed();
   },
 
   // User Settings Repository
@@ -842,7 +1124,7 @@ const db = {
       if (!settings) {
         settings = {
           user_id: uId,
-          reminder_threshold_days: 5,
+          reminder_threshold_days: 7,
           alert_points: '1,3,5'
         };
         mockUserSettings.push(settings);
@@ -854,11 +1136,11 @@ const db = {
     if (rows.length === 0) {
       await pool.query(
         'INSERT INTO user_settings (user_id, reminder_threshold_days, alert_points) VALUES (?, ?, ?)',
-        [uId, 5, '1,3,5']
+        [uId, 7, '1,3,5']
       );
       return {
         user_id: uId,
-        reminder_threshold_days: 5,
+        reminder_threshold_days: 7,
         alert_points: '1,3,5'
       };
     }
@@ -896,7 +1178,7 @@ const db = {
   // Recalculate Alerts for Mock DB
   recalculateMockAlerts: (userId = 1) => {
     const uId = parseInt(userId);
-    let threshold = 5;
+    let threshold = 7;
     const settings = mockUserSettings.find(s => s.user_id === uId);
     if (settings) {
       threshold = settings.reminder_threshold_days;
@@ -915,12 +1197,13 @@ const db = {
     const otherUsersAlerts = mockAlerts.filter(a => a.user_id !== uId);
     const newAlerts = [];
 
-    mockBatches.forEach(b => {
-      const exp = new Date(b.expiry_date);
+    mockProductBatches.forEach(pb => {
+      const prod = mockProducts.find(p => p.id === pb.product_id) || { product_name: 'Unknown', category: 'Snacks' };
+      const exp = new Date(pb.expiry_date);
       exp.setHours(0, 0, 0, 0);
       const diffTime = exp - now;
       const rem = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      const batchNo = b.batch_number || `B-BATCH-${String(b.id).padStart(3, '0')}`;
+      const batchNo = pb.batch_number;
 
       let alertType = null;
       let priority = 'Low';
@@ -929,62 +1212,62 @@ const db = {
       if (rem < 0) {
         alertType = 'expired';
         priority = 'High';
-        msg = `Batch ${batchNo} of "${b.product_name}" has expired!`;
+        msg = `Batch ${batchNo} of "${prod.product_name}" has expired!`;
       } else if (rem <= threshold) {
         alertType = 'near_expiry';
         if (rem <= 1) {
           priority = 'High';
-          msg = `Batch ${batchNo} of "${b.product_name}" expires in ${rem} day(s)!`;
+          msg = `Batch ${batchNo} of "${prod.product_name}" expires in ${rem} day(s)!`;
         } else if (rem <= 3) {
           priority = 'Medium';
-          msg = `Batch ${batchNo} of "${b.product_name}" expires in ${rem} days.`;
+          msg = `Batch ${batchNo} of "${prod.product_name}" expires in ${rem} days.`;
         } else {
           priority = 'Low';
-          msg = `Batch ${batchNo} of "${b.product_name}" expires in ${rem} days.`;
+          msg = `Batch ${batchNo} of "${prod.product_name}" expires in ${rem} days.`;
         }
       }
 
       if (alertType) {
-        const isRead = !!readAlertsMap[`${b.id}-${alertType}`];
+        const isRead = !!readAlertsMap[`${pb.id}-${alertType}`];
         newAlerts.push({
-          id: b.id * 1000 + uId * 10 + 1,
+          id: pb.id * 1000 + uId * 10 + 1,
           user_id: uId,
-          batch_id: b.id,
+          batch_id: pb.id,
           alert_type: alertType,
           priority,
           message: msg,
           is_read: isRead,
-          created_at: b.created_at || new Date(),
-          product_name: b.product_name,
-          category: b.category,
-          expiry_date: b.expiry_date,
-          current_stock: b.quantity,
+          created_at: pb.created_at || new Date(),
+          product_name: prod.product_name,
+          category: prod.category,
+          expiry_date: pb.expiry_date,
+          current_stock: pb.quantity,
           remaining_days: rem,
           batch_number: batchNo
         });
       }
 
-      if (b.quantity <= 15) {
+      if (pb.quantity <= 15) {
         const stockType = 'low_stock';
-        const stockPriority = b.quantity === 0 ? 'High' : (b.quantity <= 5 ? 'Medium' : 'Low');
-        const stockMsg = b.quantity === 0 
-          ? `Batch ${batchNo} of "${b.product_name}" is out of stock!`
-          : `Batch ${batchNo} of "${b.product_name}" has low stock (${b.quantity} remaining).`;
+        const stockPriority = pb.quantity === 0 ? 'High' : (pb.quantity <= 5 ? 'Medium' : 'Low');
+        const stockMsg = pb.quantity === 0 
+          ? `Batch ${batchNo} of "${prod.product_name}" is out of stock!`
+          : `Batch ${batchNo} of "${prod.product_name}" has low stock (${pb.quantity} remaining).`;
 
-        const isRead = !!readAlertsMap[`${b.id}-${stockType}`];
+        const isRead = !!readAlertsMap[`${pb.id}-${stockType}`];
         newAlerts.push({
-          id: b.id * 1000 + uId * 10 + 2,
+          id: pb.id * 1000 + uId * 10 + 2,
           user_id: uId,
-          batch_id: b.id,
+          batch_id: pb.id,
           alert_type: stockType,
           priority: stockPriority,
           message: stockMsg,
           is_read: isRead,
-          created_at: b.created_at || new Date(),
-          product_name: b.product_name,
-          category: b.category,
-          expiry_date: b.expiry_date,
-          current_stock: b.quantity,
+          created_at: pb.created_at || new Date(),
+          product_name: prod.product_name,
+          category: prod.category,
+          expiry_date: pb.expiry_date,
+          current_stock: pb.quantity,
           remaining_days: rem,
           batch_number: batchNo
         });
@@ -1001,7 +1284,7 @@ const db = {
     const uId = parseInt(userId);
 
     const settings = await db.getUserSettings(uId);
-    const threshold = settings.reminder_threshold_days;
+    const threshold = settings.reminder_threshold_days || 7;
     
     const batches = await db.getAllBatches();
     
@@ -1072,11 +1355,12 @@ const db = {
     }
 
     const query = `
-      SELECT a.*, b.product_name, b.category, b.expiry_date, b.quantity AS current_stock,
-             DATEDIFF(b.expiry_date, CURDATE()) AS remaining_days,
-             CONCAT('B-BATCH-', LPAD(b.id, 3, '0')) AS batch_number
+      SELECT a.*, p.product_name, p.category, pb.expiry_date, pb.quantity AS current_stock,
+             DATEDIFF(pb.expiry_date, CURDATE()) AS remaining_days,
+             pb.batch_number
       FROM alerts a
-      JOIN production_batches b ON a.batch_id = b.id
+      JOIN product_batches pb ON a.batch_id = pb.id
+      JOIN products p ON pb.product_id = p.id
       WHERE a.user_id = ?
       ORDER BY 
         CASE a.priority
@@ -1091,7 +1375,6 @@ const db = {
     return rows;
   },
 
-  // Mark all alerts as read
   markAllAlertsAsRead: async (userId) => {
     if (!userId) return false;
     const uId = parseInt(userId);
@@ -1106,7 +1389,6 @@ const db = {
     return true;
   },
 
-  // Mark specific alert as read
   markAlertAsRead: async (id, userId) => {
     if (!userId) return false;
     const alertId = parseInt(id);
@@ -1128,17 +1410,15 @@ const db = {
     const mapAndSortUsers = (usersList) => {
       return usersList.map(u => ({
         id: u.id,
-        name: u.full_name,
+        name: u.name,
         email: u.email,
         role: u.role,
         createdAt: u.created_at,
-        lastLogin: u.last_login
+        lastLogin: u.lastLogin || u.created_at
       })).sort((a, b) => {
         const dateA = new Date(a.lastLogin || a.createdAt);
         const dateB = new Date(b.lastLogin || b.createdAt);
-        const timeA = isNaN(dateA.getTime()) ? 0 : dateA.getTime();
-        const timeB = isNaN(dateB.getTime()) ? 0 : dateB.getTime();
-        return timeB - timeA; // Descending (latest first)
+        return dateB.getTime() - dateA.getTime();
       });
     };
 
@@ -1146,43 +1426,29 @@ const db = {
       return {
         isMock: true,
         users: mapAndSortUsers(mockUsers),
-        batches: mockBatches,
+        batches: await db.getAllBatches(),
         alerts: mockAlerts,
         settings: mockUserSettings,
-        activityLog: mockActivityLog
+        activityLog: mockUserActivities
       };
     }
-    const [users] = await pool.query('SELECT id, full_name, email, role, created_at, last_login FROM users');
-    const [batches] = await pool.query('SELECT * FROM production_batches');
+    const [users] = await pool.query('SELECT id, name, email, role, created_at FROM users');
+    const batches = await db.getAllBatches();
     const [alerts] = await pool.query('SELECT * FROM alerts');
     const [settings] = await pool.query('SELECT * FROM user_settings');
+    const [activities] = await pool.query('SELECT * FROM user_activity');
     return {
       isMock: false,
       users: mapAndSortUsers(users),
-      batches: batches.map(b => {
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
-        const exp = new Date(b.expiry_date);
-        exp.setHours(0, 0, 0, 0);
-        const diffTime = exp - now;
-        const rem = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return {
-          ...b,
-          remaining_days: rem,
-          batch_number: `B-BATCH-${b.id.toString().padStart(3, '0')}`,
-          prepared_date: b.manufacturing_date,
-          quantity_produced: b.quantity,
-          remaining_quantity: b.quantity
-        };
-      }),
-      alerts,
-      settings,
-      activityLog: mockActivityLog
+      batches: batches,
+      alerts: alerts,
+      settings: settings,
+      activityLog: activities
     };
   }
 };
 
-// Initialize database at the end of the script after db structure is defined
+// Initialize database
 initializeDatabase();
 
 // Background timer to auto-refresh database alerts every 5 minutes

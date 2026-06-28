@@ -112,13 +112,27 @@ function renderDbViewerHtml(data) {
 
   // Build Activity Log Rows HTML
   const activityRows = activityLog && activityLog.length > 0 
-    ? activityLog.map(act => `
-        <div class="log-item ${act.type || 'info'}">
-          <span class="log-time local-time" data-time="${act.created_at}" data-time-only="true">[${act.created_at ? new Date(act.created_at).toISOString() : 'N/A'}]</span>
-          <span class="log-text">${act.text}</span>
-        </div>
-      `).join('')
-    : `<div class="empty-state">No activities logged. (Activity logging is only active in in-memory mock fallback mode)</div>`;
+    ? activityLog.map(act => {
+        if (act.action_type) {
+          const actionClass = act.action_type === 'SIGNUP' ? 'success' : (act.action_type === 'LOGOUT' ? 'warning' : 'info');
+          const timeVal = act.timestamp;
+          const text = `User <strong>${act.name}</strong> (ID: ${act.user_id}) performed <strong>${act.action_type}</strong> from IP <code>${act.ip_address}</code> (${act.device_info})`;
+          return `
+            <div class="log-item ${actionClass}">
+              <span class="log-time local-time" data-time="${timeVal}" data-time-only="true">[${timeVal ? new Date(timeVal).toISOString() : 'N/A'}]</span>
+              <span class="log-text">${text}</span>
+            </div>
+          `;
+        } else {
+          return `
+            <div class="log-item ${act.type || 'info'}">
+              <span class="log-time local-time" data-time="${act.created_at}" data-time-only="true">[${act.created_at ? new Date(act.created_at).toISOString() : 'N/A'}]</span>
+              <span class="log-text">${act.text || 'N/A'}</span>
+            </div>
+          `;
+        }
+      }).join('')
+    : `<div class="empty-state">No activities logged.</div>`;
 
   return `
 <!DOCTYPE html>

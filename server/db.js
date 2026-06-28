@@ -1451,14 +1451,22 @@ const db = {
         batches: await db.getAllBatches(),
         alerts: mockAlerts,
         settings: mockUserSettings,
-        activityLog: mockUserActivities
+        activityLog: mockUserActivities.map(act => {
+          const u = mockUsers.find(user => user.id === act.user_id) || { name: 'User' };
+          return { ...act, name: u.name };
+        })
       };
     }
     const [users] = await pool.query('SELECT id, name, email, role, created_at FROM users');
     const batches = await db.getAllBatches();
     const [alerts] = await pool.query('SELECT * FROM alerts');
     const [settings] = await pool.query('SELECT * FROM user_settings');
-    const [activities] = await pool.query('SELECT * FROM user_activity');
+    const [activities] = await pool.query(`
+      SELECT ua.*, u.name 
+      FROM user_activity ua 
+      JOIN users u ON ua.user_id = u.id 
+      ORDER BY ua.timestamp DESC
+    `);
     return {
       isMock: false,
       users: mapAndSortUsers(users),

@@ -293,6 +293,28 @@ async function initializeDatabase() {
       )
     `);
 
+    // Check if users table needs 'name' column (migration for existing database)
+    try {
+      const [columns] = await pool.query("SHOW COLUMNS FROM users LIKE 'name'");
+      if (columns.length === 0) {
+        console.log("Column 'name' is missing in 'users' table. Migrating 'full_name' to 'name'...");
+        await pool.query("ALTER TABLE users ADD COLUMN name VARCHAR(100) NULL");
+        
+        // Copy values from full_name to name
+        try {
+          await pool.query("UPDATE users SET name = full_name WHERE name IS NULL");
+        } catch (e) {
+          // fallback if full_name also doesn't exist
+          await pool.query("UPDATE users SET name = 'User' WHERE name IS NULL");
+        }
+        
+        // Make name NOT NULL
+        await pool.query("ALTER TABLE users MODIFY COLUMN name VARCHAR(100) NOT NULL");
+      }
+    } catch (err) {
+      console.error("Failed to alter users table for 'name' column:", err.message);
+    }
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS user_activity (
         id INT AUTO_INCREMENT PRIMARY KEY,

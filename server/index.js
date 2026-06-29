@@ -1,7 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const authRoutes = require('./routes/auth');
 const batchRoutes = require('./routes/batches');
@@ -89,7 +90,6 @@ app.get('/db-viewer', async (req, res) => {
   }
 });
 
-const path = require('path');
 const fs = require('fs');
 
 const clientDistPath = path.join(__dirname, '../client/dist');

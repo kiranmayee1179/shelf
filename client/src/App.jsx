@@ -3,6 +3,7 @@ import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Batches from './pages/Batches';
 import Alerts from './pages/Alerts';
@@ -63,6 +64,7 @@ function App() {
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Protected Routes */}
           <Route path="/dashboard" element={

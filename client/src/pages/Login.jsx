@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FaShieldAlt, FaGoogle, FaEnvelope, FaLock } from 'react-icons/fa';
+import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
@@ -66,7 +67,7 @@ const Login = () => {
     }
   };
 
-  const handleForgotPassword = (e) => {
+  const handleForgotPassword = async (e) => {
     e.preventDefault();
     setSuccess('');
     setError('');
@@ -76,12 +77,41 @@ const Login = () => {
       return;
     }
 
-    // Simulate reset link sent
-    setSuccess(`Password reset instructions have been dispatched to ${forgotEmail}.`);
-    setForgotEmail('');
-    setTimeout(() => {
-      setShowForgot(false);
-    }, 4000);
+    setSubmitting(true);
+
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+      const response = await axios.post(`${API_URL}/auth/forgot-password`, {
+        email: forgotEmail
+      });
+
+      if (response.data?.devResetLink) {
+        const tokenMatch = response.data.devResetLink.match(/token=([^&]+)/);
+        const token = tokenMatch ? tokenMatch[1] : '';
+        const localResetLink = `#/reset-password?token=${token}`;
+        
+        setSuccess(
+          <span>
+            {response.data.message}{' '}
+            <a 
+              href={localResetLink} 
+              style={{ fontWeight: 'bold', textDecoration: 'underline', color: 'inherit' }}
+            >
+              [Click here to Reset Password (Dev Link)]
+            </a>
+          </span>
+        );
+      } else {
+        setSuccess(response.data.message || 'Password reset instructions sent.');
+      }
+      
+      setForgotEmail('');
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.message || 'Failed to request password reset. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -210,8 +240,9 @@ const Login = () => {
                 type="submit"
                 className="btn btn-primary"
                 style={{ width: '100%', padding: '0.75rem', marginTop: '1rem' }}
+                disabled={submitting}
               >
-                Send Instructions
+                {submitting ? 'Sending...' : 'Send Instructions'}
               </button>
 
               <button

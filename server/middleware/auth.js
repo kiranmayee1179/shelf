@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'shelf_life_system_jwt_secret_key_987654321';
 

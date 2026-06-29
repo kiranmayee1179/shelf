@@ -2,9 +2,11 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
 const db = require('../db');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'shelf_life_system_jwt_secret_key_987654321';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -252,6 +254,69 @@ router.put('/settings', auth, async (req, res) => {
   } catch (error) {
     console.error('Update settings error:', error);
     res.status(500).json({ message: 'Server error while updating settings' });
+  }
+});
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: 'Email address is required' });
+    }
+
+    const user = await db.getUserByEmail(email);
+    if (!user) {
+      console.log(`Password reset requested for non-existent email: ${email}`);
+      return res.json({ message: 'If that email exists in our system, we have sent password reset instructions.' });
+    }
+
+    // Generate secure token and expiry (1 hour)
+    const token = crypto.randomBytes(20).toString('hex');
+    const expiresAt = new Date(Date.now() + 3600000); // 1 hour
+
+    await db.savePasswordResetToken(email, token, expiresAt);
+
+    // Build the reset password link (Frontend is HashRouter, so it will contain #/reset-password?token=...)
+    const resetUrl = `http://localhost:5173/#/reset-password?token=${token}`;
+    console.log(`=========================================`);
+    console.log(`PASSWORD RESET REQUEST FOR: ${email}`);
+    console.log(`RESET URL: ${resetUrl}`);
+    console.log(`=========================================`);
+
+    // For ease of testing in development/mock mode, we return the devResetLink
+    res.json({
+      message: 'If that email exists in our system, we have sent password reset instructions.',
+      devResetLink: resetUrl
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ message: 'Server error during forgot password request' });
+  }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      return res.status(400).json({ message: 'Token and new password are required' });
+    }
+
+    const user = await db.getUserByResetToken(token);
+    if (!user) {
+      return res.status(400).json({ message: 'Password reset token is invalid or has expired.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    await db.updateUserPassword(user.id, hashedPassword);
+
+    res.json({ message: 'Your password has been reset successfully.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ message: 'Server error during password reset' });
   }
 });
 

@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
   password VARCHAR(255) NULL,
   google_id VARCHAR(100) UNIQUE NULL,
   role VARCHAR(50) DEFAULT 'user',
+  reset_token VARCHAR(255) NULL,
+  reset_token_expires TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

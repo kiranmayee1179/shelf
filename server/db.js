@@ -2,7 +2,7 @@ const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const isAiven = (process.env.DB_HOST || '').includes('aivencloud.com');
 const sslConfig = (process.env.DB_SSL === 'true' || isAiven) ? { rejectUnauthorized: false } : undefined;
@@ -289,6 +289,8 @@ async function initializeDatabase() {
         password VARCHAR(255) NULL,
         google_id VARCHAR(100) UNIQUE NULL,
         role VARCHAR(50) DEFAULT 'user',
+        reset_token VARCHAR(255) NULL,
+        reset_token_expires TIMESTAMP NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -313,6 +315,21 @@ async function initializeDatabase() {
       }
     } catch (err) {
       console.error("Failed to alter users table for 'name' column:", err.message);
+    }
+
+    // Check if users table needs 'reset_token' and 'reset_token_expires' columns
+    try {
+      const [tokenCol] = await pool.query("SHOW COLUMNS FROM users LIKE 'reset_token'");
+      if (tokenCol.length === 0) {
+        console.log("Columns 'reset_token' or 'reset_token_expires' are missing in 'users' table. Migrating...");
+        await pool.query("ALTER TABLE users ADD COLUMN reset_token VARCHAR(255) NULL");
+      }
+      const [expiresCol] = await pool.query("SHOW COLUMNS FROM users LIKE 'reset_token_expires'");
+      if (expiresCol.length === 0) {
+        await pool.query("ALTER TABLE users ADD COLUMN reset_token_expires TIMESTAMP NULL");
+      }
+    } catch (err) {
+      console.error("Failed to alter users table for reset token columns:", err.message);
     }
 
     await pool.query(`
@@ -616,6 +633,72 @@ const db = {
       role: role || 'user',
       created_at: new Date()
     };
+  },
+
+  savePasswordResetToken: async (email, token, expiresAt) => {
+    if (useMock) {
+      const u = mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (u) {
+        u.reset_token = token;
+        u.reset_token_expires = expiresAt;
+        saveMockData();
+        return true;
+      }
+      return false;
+    }
+    const [result] = await pool.query(
+      'UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE LOWER(email) = LOWER(?)',
+      [token, expiresAt, email]
+    );
+    return result.affectedRows > 0;
+  },
+
+  getUserByResetToken: async (token) => {
+    if (useMock) {
+      const u = mockUsers.find(u => u.reset_token === token);
+      if (u) {
+        const now = new Date();
+        const expires = new Date(u.reset_token_expires);
+        if (expires > now) {
+          u.full_name = u.name; // compatibility mapping
+          return u;
+        }
+      }
+      return null;
+    }
+    const [rows] = await pool.query(
+      'SELECT id, name, name AS full_name, email, password, google_id, role, created_at, reset_token_expires FROM users WHERE reset_token = ?',
+      [token]
+    );
+    if (rows.length > 0) {
+      const user = rows[0];
+      const now = new Date();
+      const expires = new Date(user.reset_token_expires);
+      if (expires > now) {
+        return user;
+      }
+    }
+    return null;
+  },
+
+  updateUserPassword: async (userId, hashedPassword) => {
+    const uId = parseInt(userId);
+    if (useMock) {
+      const u = mockUsers.find(u => u.id === uId);
+      if (u) {
+        u.password = hashedPassword;
+        u.reset_token = null;
+        u.reset_token_expires = null;
+        saveMockData();
+        return true;
+      }
+      return false;
+    }
+    const [result] = await pool.query(
+      'UPDATE users SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
+      [hashedPassword, uId]
+    );
+    return result.affectedRows > 0;
   },
 
   logUserActivity: async (userId, actionType, deviceInfo, ipAddress) => {
